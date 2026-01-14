@@ -16,6 +16,7 @@ import { categoryConfig } from '@/data/assessment-questions';
 import type { CognitiveCategory } from '@/data/assessment-questions';
 import Card, { CardHeader, CardContent, CardFooter } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { RadarChart, formatCognitiveData } from '@/components/charts';
 
 export default function AssessmentResultPage() {
   const router = useRouter();
@@ -164,6 +165,30 @@ export default function AssessmentResultPage() {
               {riskConfig.description}
             </p>
           </div>
+        </Card>
+
+        {/* 레이더 차트 */}
+        <Card variant="bordered" padding="md" className="mb-6">
+          <CardHeader
+            title="인지 기능 분포"
+            subtitle="6개 영역 레이더 차트"
+          />
+          <CardContent>
+            <div className="flex justify-center py-4">
+              <RadarChart
+                data={formatCognitiveData(
+                  result.categoryScores.map((cs) => ({
+                    ...cs,
+                    icon: categoryConfig[cs.category]?.icon,
+                  }))
+                )}
+                size={320}
+                colorScheme="risk"
+                showLabels={true}
+                showValues={true}
+              />
+            </div>
+          </CardContent>
         </Card>
 
         {/* 영역별 점수 */}
