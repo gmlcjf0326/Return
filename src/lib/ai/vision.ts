@@ -1,8 +1,4 @@
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { getOpenAIClient } from './openai';
 
 export interface PhotoAnalysisResult {
   scene: string;
@@ -25,7 +21,8 @@ export async function analyzePhoto(
     ? { type: 'image_url' as const, image_url: { url: imageUrl } }
     : { type: 'image_url' as const, image_url: { url: imageUrl } };
 
-  const response = await openai.chat.completions.create({
+  const client = getOpenAIClient();
+  const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       {
@@ -94,7 +91,8 @@ export async function generateReminiscenceQuestions(
     ? `사용자는 ${userContext.birthYear}년생입니다.`
     : '';
 
-  const response = await openai.chat.completions.create({
+  const client = getOpenAIClient();
+  const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       {

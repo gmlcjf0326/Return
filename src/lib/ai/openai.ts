@@ -1,9 +1,26 @@
 import OpenAI from 'openai';
 
 // OpenAI 클라이언트 (서버 사이드 전용)
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// API 키가 없으면 null을 반환 (빌드 시 에러 방지)
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.');
+    }
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
+
+export const openai = {
+  get client(): OpenAI {
+    return getOpenAIClient();
+  }
+};
 
 // GPT-4o-mini로 텍스트 생성
 export async function generateText(
@@ -11,7 +28,8 @@ export async function generateText(
   systemPrompt?: string,
   options?: { maxTokens?: number; temperature?: number }
 ) {
-  const response = await openai.chat.completions.create({
+  const client = getOpenAIClient();
+  const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
@@ -29,7 +47,8 @@ export async function analyzeImage(
   imageUrl: string,
   prompt: string
 ): Promise<string> {
-  const response = await openai.chat.completions.create({
+  const client = getOpenAIClient();
+  const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       {
@@ -54,7 +73,8 @@ export async function analyzeImage(
 
 // 텍스트 임베딩 생성
 export async function createEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+  const client = getOpenAIClient();
+  const response = await client.embeddings.create({
     model: 'text-embedding-3-small',
     input: text,
   });
@@ -64,7 +84,8 @@ export async function createEmbedding(text: string): Promise<number[]> {
 
 // Whisper로 음성 인식
 export async function transcribeAudio(audioFile: File): Promise<string> {
-  const response = await openai.audio.transcriptions.create({
+  const client = getOpenAIClient();
+  const response = await client.audio.transcriptions.create({
     file: audioFile,
     model: 'whisper-1',
     language: 'ko',
@@ -73,4 +94,5 @@ export async function transcribeAudio(audioFile: File): Promise<string> {
   return response.text;
 }
 
+export { getOpenAIClient };
 export default openai;

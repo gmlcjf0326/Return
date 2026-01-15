@@ -42,11 +42,11 @@ export async function POST(request: NextRequest) {
         executiveScore,
         visuospatialScore,
         riskLevel: riskLevel as RiskLevel,
-        rawResponses: responses ?? [],
-        behaviorData: {
+        rawResponses: JSON.stringify(responses ?? []),
+        behaviorData: JSON.stringify({
           duration,
           categoryScores,
-        },
+        }),
       },
     });
 

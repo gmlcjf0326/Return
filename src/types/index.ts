@@ -84,7 +84,9 @@ export type QuestionType =
   | 'voice_input'
   | 'drawing'
   | 'sequence'
-  | 'reaction';
+  | 'reaction'
+  | 'pattern_match'
+  | 'recall';
 
 // 훈련 관련 타입
 export interface TrainingSession {

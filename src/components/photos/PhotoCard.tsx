@@ -28,7 +28,10 @@ interface PhotoCardProps {
   onAnalyze?: (photoId: string) => void;
   onDelete?: (photoId: string) => void;
   selected?: boolean;
+  isAnalyzing?: boolean;
 }
+
+export type { PhotoCardProps };
 
 export default function PhotoCard({
   photo,
@@ -36,7 +39,10 @@ export default function PhotoCard({
   onAnalyze,
   onDelete,
   selected = false,
+  isAnalyzing = false,
 }: PhotoCardProps) {
+  // Use prop isAnalyzing if provided, otherwise fallback to photo.isAnalyzing
+  const analyzing = isAnalyzing || photo.isAnalyzing;
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
 
@@ -88,7 +94,7 @@ export default function PhotoCard({
 
       {/* 상태 배지 */}
       <div className="absolute top-2 left-2">
-        {photo.isAnalyzing ? (
+        {analyzing ? (
           <StatusBadge status="pending">분석 중...</StatusBadge>
         ) : photo.isAnalyzed ? (
           <StatusBadge status="normal">분석 완료</StatusBadge>
@@ -134,7 +140,7 @@ export default function PhotoCard({
 
         {/* 액션 버튼 */}
         <div className="absolute top-2 right-2 flex gap-1">
-          {!photo.isAnalyzed && !photo.isAnalyzing && onAnalyze && (
+          {!photo.isAnalyzed && !analyzing && onAnalyze && (
             <button
               onClick={handleAnalyze}
               className="w-8 h-8 bg-[var(--primary)] text-white rounded-full flex items-center justify-center hover:bg-[var(--primary-deep)] transition-colors"

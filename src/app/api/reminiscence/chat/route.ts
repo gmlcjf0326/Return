@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { getOpenAIClient } from '@/lib/ai/openai';
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -63,7 +59,8 @@ export async function POST(request: NextRequest) {
     let assistantResponse: string;
 
     try {
-      const completion = await openai.chat.completions.create({
+      const client = getOpenAIClient();
+      const completion = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: messages.map((m) => ({
           role: m.role,

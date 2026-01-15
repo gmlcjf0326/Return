@@ -20,17 +20,18 @@ import { RadarChart, formatCognitiveData } from '@/components/charts';
 
 export default function AssessmentResultPage() {
   const router = useRouter();
-  const { sessionId } = useSessionStore();
+  const { session } = useSessionStore();
+  const sessionId = session?.id;
   const { responses, startTime, isCompleted, resetAssessment } = useAssessmentStore();
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // 세션 없으면 홈으로
   useEffect(() => {
-    if (!sessionId) {
+    if (!session) {
       router.push('/');
     }
-  }, [sessionId, router]);
+  }, [session, router]);
 
   // 결과가 없으면 진단 페이지로
   useEffect(() => {

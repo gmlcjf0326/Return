@@ -42,6 +42,13 @@ export async function POST(
     // 이미지 URL 생성 (로컬 파일의 경우 절대 경로로)
     let imageUrl = photo.fileUrl;
 
+    if (!imageUrl) {
+      return NextResponse.json(
+        { error: 'Photo file URL not found' },
+        { status: 400 }
+      );
+    }
+
     // 로컬 파일인 경우 base64로 변환하거나 public URL 사용
     if (imageUrl.startsWith('/')) {
       // development에서는 localhost 사용

@@ -9,7 +9,7 @@ import { categoryConfig } from '@/data/assessment-questions';
 export interface QuestionResponse {
   questionId: string;
   category: CognitiveCategory;
-  answer: string | string[] | number;
+  answer: string | string[] | number | boolean;
   isCorrect: boolean;
   responseTime: number; // ms
   points: number;
@@ -113,7 +113,10 @@ export function checkAnswer(
 /**
  * 답변 정규화 (공백 제거, 소문자 변환)
  */
-function normalizeAnswer(answer: string | number): string {
+function normalizeAnswer(answer: string | number | string[] | boolean): string {
+  if (Array.isArray(answer)) {
+    return answer.map(a => String(a).trim().toLowerCase()).join(',').replace(/\s+/g, '');
+  }
   return String(answer).trim().toLowerCase().replace(/\s+/g, '');
 }
 
