@@ -6,9 +6,16 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
+
+// Note: 로컬 개발 시 SQLite 사용하려면 아래 설정으로 변경
+// datasource db {
+//   provider = "sqlite"
+//   url      = "file:./dev.db"
+// }
 
 // 세션 (인증 없음 - UUID 기반)
 model Session {
