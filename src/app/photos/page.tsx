@@ -11,7 +11,8 @@ import { Button, Card } from '@/components/ui';
 
 export default function PhotosPage() {
   const router = useRouter();
-  const { sessionId, ensureSession } = useSessionStore();
+  const { session, initSession } = useSessionStore();
+  const sessionId = session?.id;
   const { photos, addPhotos, updatePhoto, removePhoto, selectPhoto, selectedPhotoId } = usePhotoStore();
 
   const [isUploading, setIsUploading] = useState(false);
@@ -20,8 +21,8 @@ export default function PhotosPage() {
 
   // 세션 확인
   useEffect(() => {
-    ensureSession();
-  }, [ensureSession]);
+    initSession();
+  }, [initSession]);
 
   // 서버에서 사진 목록 불러오기
   useEffect(() => {

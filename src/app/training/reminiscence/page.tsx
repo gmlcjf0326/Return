@@ -14,7 +14,8 @@ function ReminiscenceContent() {
   const searchParams = useSearchParams();
   const photoId = searchParams.get('photoId');
 
-  const { sessionId, ensureSession } = useSessionStore();
+  const { session, initSession } = useSessionStore();
+  const sessionId = session?.id;
   const { photos, getPhotoById } = usePhotoStore();
 
   const [currentPhoto, setCurrentPhoto] = useState<PhotoData | null>(null);
@@ -25,8 +26,8 @@ function ReminiscenceContent() {
 
   // 세션 확인
   useEffect(() => {
-    ensureSession();
-  }, [ensureSession]);
+    initSession();
+  }, [initSession]);
 
   // 사진 로드
   useEffect(() => {

@@ -53,7 +53,7 @@ export async function GET(
   }
 }
 
-// PATCH /api/session/[id] - 세션 업데이트
+// PATCH /api/session/[id] - 세션 업데이트 (없으면 생성)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -63,9 +63,17 @@ export async function PATCH(
     const body = await request.json();
     const { nickname, birthYear, profileData, lastActiveAt } = body;
 
-    const session = await prisma.session.update({
+    // upsert: 없으면 생성, 있으면 업데이트
+    const session = await prisma.session.upsert({
       where: { id },
-      data: {
+      create: {
+        id,
+        nickname: nickname ?? null,
+        birthYear: birthYear ?? null,
+        profileData: profileData ?? null,
+        lastActiveAt: lastActiveAt ? new Date(lastActiveAt) : new Date(),
+      },
+      update: {
         ...(nickname !== undefined && { nickname }),
         ...(birthYear !== undefined && { birthYear }),
         ...(profileData !== undefined && { profileData }),

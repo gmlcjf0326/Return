@@ -28,7 +28,7 @@ function convertQuestion(q: DataQuestion): import('@/types').AssessmentQuestion 
 
 export default function AssessmentPage() {
   const router = useRouter();
-  const { sessionId } = useSessionStore();
+  const { session, initSession } = useSessionStore();
 
   // Assessment store
   const {
@@ -148,12 +148,10 @@ export default function AssessmentPage() {
     }
   }, [isCompleted, startTime, router]);
 
-  // 세션 없으면 홈으로
+  // 세션 확인 및 생성
   useEffect(() => {
-    if (!sessionId) {
-      router.push('/');
-    }
-  }, [sessionId, router]);
+    initSession();
+  }, [initSession]);
 
   // 시작 전 화면
   if (!isStarted) {
