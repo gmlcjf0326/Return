@@ -77,6 +77,36 @@ export default function TrainingPage() {
       status: 'available',
       tags: ['회상', '정서'],
     },
+    {
+      id: 'voice',
+      title: '음성 훈련',
+      subtitle: 'Voice Training',
+      description: '문장 읽기, 단어 따라하기 등으로 발화 능력을 향상시킵니다.',
+      icon: (
+        <svg className="w-8 h-8 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+        </svg>
+      ),
+      bgColor: 'bg-pink-100',
+      href: '/training/voice',
+      status: 'available',
+      tags: ['음성', '발화'],
+    },
+    {
+      id: 'movement',
+      title: '동작 훈련',
+      subtitle: 'Movement Training',
+      description: '간단한 동작을 따라하며 신체 협응력과 자세 인식을 훈련합니다.',
+      icon: (
+        <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      bgColor: 'bg-orange-100',
+      href: '/training/movement',
+      status: 'available',
+      tags: ['동작', '신체'],
+    },
   ];
 
   const getTrainingTypeName = (type: string) => {
@@ -86,6 +116,8 @@ export default function TrainingPage() {
       language_game: '언어력 게임',
       attention_game: '주의력 게임',
       reminiscence: '회상 대화',
+      voice: '음성 훈련',
+      movement: '동작 훈련',
     };
     return names[type] || type;
   };

@@ -21,6 +21,10 @@ interface QuestionCardProps {
   timerRunning?: boolean;
   /** 비활성화 여부 */
   disabled?: boolean;
+  /** 입력 필드 참조 (자동 포커스용) */
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  /** 문항 인덱스 - 타이머 리셋용 */
+  questionIndex?: number;
 }
 
 export default function QuestionCard({
@@ -31,6 +35,8 @@ export default function QuestionCard({
   onTimeUp,
   timerRunning = true,
   disabled = false,
+  inputRef,
+  questionIndex,
 }: QuestionCardProps) {
   const config = categoryConfig[question.category];
 
@@ -69,6 +75,7 @@ export default function QuestionCard({
           onTimeUp={onTimeUp}
           size="md"
           warningThreshold={Math.min(10, Math.floor(question.timeLimit * 0.2))}
+          questionIndex={questionIndex}
         />
       </div>
 
@@ -108,6 +115,8 @@ export default function QuestionCard({
         disabled={disabled}
         placeholder="답변을 입력하세요"
         hint={question.hint}
+        multiSelect={question.multiSelect}
+        inputRef={inputRef}
       />
     </Card>
   );

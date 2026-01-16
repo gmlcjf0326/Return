@@ -1,15 +1,19 @@
+/**
+ * 회상 대화 채팅 API
+ * TODO: [REAL_DATA] 실제 데이터베이스 연동 시 prisma 로직 활성화
+ * TODO: [LLM_API] 실제 LLM API 연동
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { getOpenAIClient } from '@/lib/ai/openai';
-
-interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
+import { generateReminiscenceResponse, type Message } from '@/lib/ai/llm';
+import { getRandomFollowUpQuestion, getRandomHintQuestion } from '@/data/reminiscenceQuestions';
+import type { PhotoData, PhotoCategory } from '@/components/photos/PhotoCard';
 
 export async function POST(request: NextRequest) {
   try {
-    const { photoId, sessionId, message, conversationHistory } = await request.json();
+    const body = await request.json();
+    const { photoId, sessionId, message, conversationHistory, photoData } = body;
 
     if (!photoId || !sessionId || !message) {
       return NextResponse.json(
@@ -18,87 +22,90 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 사진 정보 조회
-    const photo = await prisma.photo.findUnique({
-      where: { id: parseInt(photoId, 10) },
-    });
+    let photo: PhotoData | null = null;
 
-    if (!photo || !photo.autoTags) {
+    // 클라이언트에서 전달된 photoData가 있으면 사용 (더미 데이터 지원)
+    if (photoData) {
+      photo = photoData as PhotoData;
+    } else {
+      // TODO: [REAL_DATA] 데이터베이스에서 사진 조회
+      try {
+        const dbPhoto = await prisma.photo.findUnique({
+          where: { id: parseInt(photoId, 10) },
+        });
+
+        if (dbPhoto && dbPhoto.fileName && dbPhoto.fileUrl) {
+          photo = {
+            id: dbPhoto.id.toString(),
+            fileName: dbPhoto.fileName,
+            fileUrl: dbPhoto.fileUrl,
+            uploadedAt: dbPhoto.createdAt.toISOString(),
+            takenDate: dbPhoto.createdAt?.toISOString(),
+            isAnalyzed: !!dbPhoto.autoTags,
+            autoTags: dbPhoto.autoTags ? JSON.parse(dbPhoto.autoTags) : null,
+          };
+        }
+      } catch (dbError) {
+        console.error('Database query failed:', dbError);
+      }
+    }
+
+    if (!photo) {
       return NextResponse.json(
-        { error: 'Photo not found or not analyzed' },
+        { error: 'Photo not found' },
         { status: 404 }
       );
     }
 
-    const autoTags = JSON.parse(photo.autoTags);
+    const category: PhotoCategory = photo.category || 'daily';
 
-    // 시스템 프롬프트 구성
-    const systemPrompt = buildSystemPrompt(autoTags);
+    // 대화 기록 변환
+    const history: Message[] = (conversationHistory || []).map(
+      (msg: { role: string; content: string }) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+      })
+    );
 
-    // 대화 기록 구성
-    const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
-    ];
-
-    // 기존 대화 기록 추가
-    if (conversationHistory && Array.isArray(conversationHistory)) {
-      conversationHistory.forEach((msg: { role: string; content: string }) => {
-        if (msg.role === 'user' || msg.role === 'assistant') {
-          messages.push({
-            role: msg.role as 'user' | 'assistant',
-            content: msg.content,
-          });
-        }
-      });
-    }
-
-    // 현재 메시지 추가
-    messages.push({ role: 'user', content: message });
-
-    // GPT 응답 생성
+    // TODO: [LLM_API] 실제 LLM으로 응답 생성
     let assistantResponse: string;
-
     try {
-      const client = getOpenAIClient();
-      const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        max_tokens: 500,
-        temperature: 0.8,
-      });
-
-      assistantResponse = completion.choices[0]?.message?.content || '죄송합니다. 응답을 생성하지 못했습니다.';
+      assistantResponse = await generateReminiscenceResponse(photo, history, message);
     } catch (error) {
-      console.error('GPT API error:', error);
-      // 기본 응답
-      assistantResponse = generateFallbackResponse(message, autoTags);
+      console.error('Failed to generate response:', error);
+      assistantResponse = generateFallbackResponse(category, history.length);
     }
 
-    // 대화 기록 저장
-    try {
-      await prisma.reminiscenceLog.create({
-        data: {
-          sessionId,
-          photoId: parseInt(photoId, 10),
-          aiQuestion: messages[messages.length - 2]?.content || '',
-          userResponse: message,
-          responseAnalysis: JSON.stringify({
-            timestamp: new Date().toISOString(),
-            messageLength: message.length,
-          }),
-        },
-      });
-    } catch (dbError) {
-      console.error('Failed to save reminiscence log:', dbError);
-      // DB 저장 실패해도 대화는 계속
+    // 힌트 질문 생성
+    const hintQuestion = getRandomHintQuestion(category);
+
+    // 대화 기록 저장 (더미 데이터가 아닌 경우만)
+    if (!photo.isDummy) {
+      try {
+        await prisma.reminiscenceLog.create({
+          data: {
+            sessionId,
+            photoId: parseInt(photoId, 10),
+            aiQuestion: history[history.length - 1]?.content || '',
+            userResponse: message,
+            responseAnalysis: JSON.stringify({
+              timestamp: new Date().toISOString(),
+              messageLength: message.length,
+              category,
+            }),
+          },
+        });
+      } catch (dbError) {
+        console.error('Failed to save reminiscence log:', dbError);
+        // DB 저장 실패해도 대화는 계속
+      }
     }
 
     return NextResponse.json({
       success: true,
       response: assistantResponse,
+      hintQuestion,
+      conversationLength: history.length + 1,
     });
   } catch (error) {
     console.error('Failed to process chat:', error);
@@ -109,51 +116,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function buildSystemPrompt(autoTags: {
-  scene: string;
-  peopleCount: number;
-  estimatedEra: string;
-  locationType: string;
-  mood: string;
-  objects: string[];
-  description: string;
-}): string {
-  return `당신은 치매 환자 또는 경도인지장애(MCI) 환자를 위한 회상치료 전문 상담사입니다.
-사용자가 업로드한 사진을 보며 따뜻하고 공감적인 대화를 나눕니다.
+/**
+ * 기본 응답 생성 (API 실패 시)
+ */
+function generateFallbackResponse(category: PhotoCategory, conversationLength: number): string {
+  if (conversationLength >= 6) {
+    // 대화가 충분히 진행됨
+    return '오늘 정말 좋은 이야기를 나눠주셔서 감사해요. 이 추억이 소중하게 느껴지네요. 혹시 더 이야기하고 싶은 부분이 있으신가요?';
+  }
 
-## 대화 원칙
-1. 항상 친절하고 따뜻한 톤을 유지하세요.
-2. 짧고 명확한 문장을 사용하세요.
-3. 환자의 응답을 긍정적으로 받아들이고 격려하세요.
-4. 과거의 좋은 기억을 떠올리게 하는 질문을 하세요.
-5. 오감(시각, 청각, 후각, 미각, 촉각)과 관련된 질문을 섞어주세요.
-6. 환자가 대답하기 어려워하면 힌트를 주거나 다른 주제로 자연스럽게 넘어가세요.
-7. 응답은 2-3문장 정도로 짧게 하고, 마지막에 새로운 질문을 포함하세요.
-
-## 현재 사진 정보
-- 장면: ${autoTags.scene}
-- 인원 수: ${autoTags.peopleCount}명
-- 추정 시대: ${autoTags.estimatedEra}
-- 장소 유형: ${autoTags.locationType}
-- 분위기: ${autoTags.mood}
-- 감지된 물체: ${autoTags.objects.join(', ')}
-- AI 설명: ${autoTags.description}
-
-## 대화 예시
-사용자: "여기는 우리 집이에요."
-상담사: "아, 집에서 찍은 사진이군요! 참 따뜻해 보이네요. 이 사진을 찍을 때 어떤 일이 있었나요?"
-
-사용자: "잘 기억이 안 나요."
-상담사: "괜찮아요, 천천히 생각해 보셔도 됩니다. 사진 속에 있는 분들은 누구인가요? 가족이신가요?"
-
-응답은 항상 한국어로 하고, 따뜻하고 공감하는 어조를 유지하세요.`;
-}
-
-function generateFallbackResponse(message: string, autoTags: {
-  scene: string;
-  peopleCount: number;
-  mood: string;
-}): string {
   const responses = [
     '그렇군요! 더 자세히 말씀해 주시겠어요?',
     '참 좋은 이야기네요. 그때 기분이 어떠셨나요?',
@@ -162,5 +133,17 @@ function generateFallbackResponse(message: string, autoTags: {
     '좋은 추억 같아요. 함께 있던 분들은 누구였나요?',
   ];
 
-  return responses[Math.floor(Math.random() * responses.length)];
+  // 카테고리별 추가 질문
+  const categoryQuestions: Record<PhotoCategory, string[]> = {
+    family: ['가족분들 성격은 어떠셨나요?', '그때 먹었던 음식이 기억나시나요?'],
+    travel: ['여행지의 날씨는 어땠나요?', '그곳에서 가장 인상 깊었던 것은요?'],
+    event: ['이날을 위해 어떤 준비를 하셨나요?', '어떤 선물을 주고받으셨나요?'],
+    nature: ['그곳의 소리나 냄새가 기억나시나요?', '자주 가시던 곳인가요?'],
+    daily: ['평소 좋아하시던 활동이 있으셨나요?', '그때와 지금 달라진 것이 있나요?'],
+    friends: ['이 친구분과 어떻게 알게 되셨나요?', '함께 자주 하시던 활동이 있었나요?'],
+  };
+
+  const allResponses = [...responses, ...(categoryQuestions[category] || [])];
+
+  return allResponses[Math.floor(Math.random() * allResponses.length)];
 }

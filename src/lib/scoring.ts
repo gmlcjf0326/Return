@@ -91,10 +91,17 @@ export function checkAnswer(
 ): boolean {
   const { correctAnswer } = question;
 
-  // 배열 형태의 정답 (복수 선택 또는 유연한 정답)
+  // 배열 형태의 정답 (복수 선택 또는 순서 배열)
   if (Array.isArray(correctAnswer)) {
     if (Array.isArray(userAnswer)) {
-      // 사용자 답변도 배열인 경우 (모두 포함되어야 함)
+      // 순서 배열 (sequence) - 순서와 내용이 정확히 일치해야 함
+      if (question.type === 'sequence') {
+        if (correctAnswer.length !== userAnswer.length) return false;
+        return correctAnswer.every((ans, index) =>
+          normalizeAnswer(ans) === normalizeAnswer(userAnswer[index])
+        );
+      }
+      // 복수 선택 - 순서 상관없이 모두 포함되어야 함
       return correctAnswer.every((ans) =>
         userAnswer.some((ua) => normalizeAnswer(ua) === normalizeAnswer(ans))
       );

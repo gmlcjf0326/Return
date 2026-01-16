@@ -3,11 +3,18 @@
 import { useState } from 'react';
 import StatusBadge from '@/components/ui/StatusBadge';
 
+// 사진 카테고리 타입
+export type PhotoCategory = 'family' | 'travel' | 'event' | 'nature' | 'daily' | 'friends';
+
 export interface PhotoData {
   id: string;
   fileName: string;
   fileUrl: string;
   uploadedAt: string;
+  // NEW: 촬영 날짜 (년월 그룹핑용)
+  takenDate?: string;  // TODO: [EXIF] 실제 EXIF 데이터에서 추출
+  // NEW: 카테고리
+  category?: PhotoCategory;
   autoTags?: {
     scene?: string;
     peopleCount?: number;
@@ -20,6 +27,7 @@ export interface PhotoData {
   userTags?: string[];
   isAnalyzed: boolean;
   isAnalyzing?: boolean;
+  isDummy?: boolean;  // TODO: [REAL_DATA] 리얼 데이터 전환 시 필터링용
 }
 
 interface PhotoCardProps {

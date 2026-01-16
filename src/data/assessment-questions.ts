@@ -31,6 +31,7 @@ export interface AssessmentQuestion {
   timeLimit: number;    // 제한 시간 (초)
   points: number;       // 배점
   hint?: string;        // 힌트 (선택적)
+  multiSelect?: boolean; // 다중 선택 가능 여부
 }
 
 // 카테고리별 설정
@@ -94,11 +95,12 @@ const memoryQuestions: AssessmentQuestion[] = [
     category: 'memory',
     type: 'recall',
     difficulty: 1,
-    question: '다음 단어들을 기억해주세요: 사과, 자동차, 연필',
-    instruction: '잠시 후 이 단어들을 물어볼 것입니다. 잘 기억해주세요.',
+    question: '다음 단어들을 기억하고 똑같이 따라 적어주세요: 사과, 자동차, 연필',
+    instruction: '위의 세 단어를 쉼표(,)로 구분하여 순서대로 입력해주세요. 예: 사과, 자동차, 연필',
     correctAnswer: ['사과', '자동차', '연필'],
     timeLimit: 30,
     points: 4,
+    hint: '세 단어를 쉼표로 구분하여 입력하세요.',
   },
   {
     id: 'memory-2',
@@ -116,22 +118,25 @@ const memoryQuestions: AssessmentQuestion[] = [
     category: 'memory',
     type: 'recall',
     difficulty: 2,
-    question: '다음 숫자를 순서대로 기억해주세요: 7, 3, 9, 2, 5',
-    instruction: '숫자를 순서대로 입력해주세요.',
+    question: '다음 숫자를 보고 순서대로 따라 적어주세요: 7, 3, 9, 2, 5',
+    instruction: '위의 다섯 숫자를 띄어쓰기 없이 순서대로 입력해주세요. 예: 73925',
     correctAnswer: '73925',
     timeLimit: 30,
     points: 4,
+    hint: '숫자만 붙여서 입력하세요.',
   },
   {
     id: 'memory-4',
     category: 'memory',
     type: 'multiple_choice',
     difficulty: 2,
-    question: '아까 기억했던 세 단어를 모두 고르세요.',
+    question: '첫 번째 문제에서 기억했던 세 단어를 모두 고르세요. (3개 선택)',
+    instruction: '정답을 모두 선택한 후 다음 버튼을 눌러주세요. 여러 개를 선택할 수 있습니다.',
     options: ['사과', '바나나', '자동차', '비행기', '연필', '지우개'],
     correctAnswer: ['사과', '자동차', '연필'],
     timeLimit: 30,
     points: 4,
+    multiSelect: true, // 다중 선택 가능
   },
   {
     id: 'memory-5',
@@ -278,12 +283,13 @@ const attentionQuestions: AssessmentQuestion[] = [
   {
     id: 'attention-1',
     category: 'attention',
-    type: 'reaction',
+    type: 'multiple_choice',
     difficulty: 1,
-    question: '화면에 "파란색" 단어가 나타나면 버튼을 누르세요.',
-    instruction: '최대한 빠르게 반응해주세요.',
-    correctAnswer: 'click',
-    timeLimit: 10,
+    question: '다음 중 색깔 이름이 "파란색"인 것을 고르세요.',
+    instruction: '글자의 색이 아닌, 글자 자체의 의미를 보세요.',
+    options: ['빨간색', '노란색', '파란색', '초록색'],
+    correctAnswer: '파란색',
+    timeLimit: 15,
     points: 3,
   },
   {
@@ -311,12 +317,13 @@ const attentionQuestions: AssessmentQuestion[] = [
   {
     id: 'attention-4',
     category: 'attention',
-    type: 'reaction',
+    type: 'multiple_choice',
     difficulty: 2,
-    question: '빨간색 원이 나타나면 버튼을 누르지 마세요. 파란색 원만 누르세요.',
-    instruction: '집중해서 색상을 구분해주세요.',
-    correctAnswer: 'conditional_click',
-    timeLimit: 15,
+    question: '다음 중 올바른 행동은 무엇인가요? "빨간 불에는 멈추고, 파란 불에만 건너세요"',
+    instruction: '신호등 규칙을 생각해보세요.',
+    options: ['빨간 불에서 건넌다', '파란 불에서 건넌다', '아무 때나 건넌다', '노란 불에서 건넌다'],
+    correctAnswer: '파란 불에서 건넌다',
+    timeLimit: 20,
     points: 3,
   },
   {
@@ -341,13 +348,9 @@ const executiveQuestions: AssessmentQuestion[] = [
     category: 'executive',
     type: 'sequence',
     difficulty: 1,
-    question: '아침에 일어나서 하는 일의 올바른 순서는?',
-    options: [
-      '세수하기 → 이불 개기 → 아침 먹기',
-      '아침 먹기 → 세수하기 → 이불 개기',
-      '이불 개기 → 아침 먹기 → 세수하기',
-    ],
-    correctAnswer: '세수하기 → 이불 개기 → 아침 먹기',
+    question: '아침에 일어나서 하는 일을 순서대로 선택하세요',
+    options: ['세수하기', '아침 먹기', '일어나기'],
+    correctAnswer: ['일어나기', '세수하기', '아침 먹기'],
     timeLimit: 30,
     points: 3,
   },
@@ -393,13 +396,9 @@ const executiveQuestions: AssessmentQuestion[] = [
     category: 'executive',
     type: 'sequence',
     difficulty: 3,
-    question: '요리 순서를 올바르게 배열하세요: 재료 손질, 재료 구입, 요리하기, 플레이팅',
-    options: [
-      '재료 구입 → 재료 손질 → 요리하기 → 플레이팅',
-      '재료 손질 → 재료 구입 → 플레이팅 → 요리하기',
-      '요리하기 → 재료 손질 → 재료 구입 → 플레이팅',
-    ],
-    correctAnswer: '재료 구입 → 재료 손질 → 요리하기 → 플레이팅',
+    question: '요리 과정을 올바른 순서대로 선택하세요',
+    options: ['재료 손질', '플레이팅', '재료 구입', '요리하기'],
+    correctAnswer: ['재료 구입', '재료 손질', '요리하기', '플레이팅'],
     timeLimit: 35,
     points: 3,
   },

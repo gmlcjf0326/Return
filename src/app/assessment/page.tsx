@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAssessmentStore } from '@/store/assessmentStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -10,6 +10,7 @@ import { checkAnswer, calculateQuestionScore } from '@/lib/scoring';
 import Card, { CardHeader, CardContent } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { QuestionCard, AssessmentProgress } from '@/components/assessment';
+import { useFaceDetection, emotionIcons, emotionLabels } from '@/hooks/useFaceDetection';
 
 // 데이터 타입을 스토어 타입으로 변환
 function convertQuestion(q: DataQuestion): import('@/types').AssessmentQuestion {
@@ -42,6 +43,7 @@ export default function AssessmentPage() {
     recordCorrection,
     resetAssessment,
     startTime,
+    recordEmotion,
   } = useAssessmentStore();
 
   // 로컬 상태
@@ -49,20 +51,63 @@ export default function AssessmentPage() {
   const [originalQuestions, setOriginalQuestions] = useState<DataQuestion[]>([]);
   const [completedCategories, setCompletedCategories] = useState<CognitiveCategory[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showCameraPrompt, setShowCameraPrompt] = useState(false);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
+
+  // 입력 필드 참조 (자동 포커스용)
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // 얼굴 감지 훅
+  const {
+    isLoading: isCameraLoading,
+    isActive: isCameraActive,
+    isPermissionGranted,
+    currentEmotion,
+    emotionTimeline,
+    videoRef,
+    startDetection,
+    stopDetection,
+    recordEmotionForQuestion,
+  } = useFaceDetection({
+    enabled: cameraEnabled,
+    detectionInterval: 2000, // 2초마다 감정 감지
+  });
 
   // 현재 문항 (원본 데이터)
   const currentOriginalQuestion = originalQuestions[currentQuestionIndex];
   const currentQuestion = questions[currentQuestionIndex];
 
-  // 진단 시작
+  // 진단 시작 (카메라 확인 후)
   const handleStartAssessment = useCallback(() => {
+    setShowCameraPrompt(true);
+  }, []);
+
+  // 실제 진단 시작
+  const doStartAssessment = useCallback(() => {
     const questionSet = createAssessmentSet();
     setOriginalQuestions(questionSet);
     const convertedQuestions = questionSet.map(convertQuestion);
     startAssessment(convertedQuestions);
     setCompletedCategories([]);
     setCurrentAnswer(null);
+    setShowCameraPrompt(false);
   }, [startAssessment]);
+
+  // 카메라 활성화 후 시작
+  const handleStartWithCamera = useCallback(async () => {
+    setCameraEnabled(true);
+    const started = await startDetection();
+    if (!started) {
+      // 카메라 권한 거부되어도 진행 가능
+      console.log('[Assessment] Camera permission denied, continuing without camera');
+    }
+    doStartAssessment();
+  }, [startDetection, doStartAssessment]);
+
+  // 카메라 없이 시작
+  const handleStartWithoutCamera = useCallback(() => {
+    doStartAssessment();
+  }, [doStartAssessment]);
 
   // 답변 변경
   const handleAnswerChange = useCallback(
@@ -144,14 +189,63 @@ export default function AssessmentPage() {
   // 진단 완료 시 결과 페이지로 이동
   useEffect(() => {
     if (isCompleted && startTime) {
+      // 카메라 정지
+      if (isCameraActive) {
+        stopDetection();
+      }
       router.push('/assessment/result');
     }
-  }, [isCompleted, startTime, router]);
+  }, [isCompleted, startTime, router, isCameraActive, stopDetection]);
 
   // 세션 확인 및 생성
   useEffect(() => {
     initSession();
   }, [initSession]);
+
+  // 문항 변경 시 감정 기록에 문항 인덱스 전달
+  useEffect(() => {
+    if (isStarted && isCameraActive) {
+      recordEmotionForQuestion(currentQuestionIndex);
+    }
+  }, [currentQuestionIndex, isStarted, isCameraActive, recordEmotionForQuestion]);
+
+  // 감정 타임라인을 스토어에 저장
+  useEffect(() => {
+    if (emotionTimeline.length > 0 && isCameraActive) {
+      const latestEmotion = emotionTimeline[emotionTimeline.length - 1];
+      recordEmotion({
+        timestamp: latestEmotion.timestamp,
+        emotion: latestEmotion.emotion,
+        confidence: latestEmotion.confidence,
+        questionIndex: latestEmotion.questionIndex,
+      });
+    }
+  }, [emotionTimeline, isCameraActive, recordEmotion]);
+
+  // 카메라 활성화 처리
+  const handleEnableCamera = useCallback(async () => {
+    setCameraEnabled(true);
+    const started = await startDetection();
+    if (started) {
+      setShowCameraPrompt(false);
+    }
+  }, [startDetection]);
+
+  // 카메라 없이 진행
+  const handleSkipCamera = useCallback(() => {
+    setShowCameraPrompt(false);
+  }, []);
+
+  // 문항 변경 시 입력 필드 자동 포커스
+  useEffect(() => {
+    if (isStarted && inputRef.current) {
+      // 약간의 딜레이 후 포커스 (렌더링 완료 보장)
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [currentQuestionIndex, isStarted]);
 
   // 시작 전 화면
   if (!isStarted) {
@@ -230,6 +324,48 @@ export default function AssessmentPage() {
           <Button onClick={handleStartAssessment} size="xl" fullWidth>
             평가 시작하기
           </Button>
+
+          {/* 카메라 활성화 프롬프트 */}
+          {showCameraPrompt && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <Card variant="elevated" padding="lg" className="max-w-md w-full">
+                <div className="text-center">
+                  <div className="text-5xl mb-4">📹</div>
+                  <h3 className="text-xl font-bold text-[var(--neutral-900)] mb-2">
+                    표정 분석 활성화
+                  </h3>
+                  <p className="text-[var(--neutral-600)] mb-6">
+                    카메라를 활성화하면 평가 중 표정을 분석하여
+                    더 정확한 행동 분석 결과를 제공합니다.
+                    데이터는 평가 완료 후 결과에만 사용됩니다.
+                  </p>
+
+                  <div className="space-y-3">
+                    <Button
+                      onClick={handleStartWithCamera}
+                      size="lg"
+                      fullWidth
+                      disabled={isCameraLoading}
+                    >
+                      {isCameraLoading ? '카메라 준비 중...' : '카메라 활성화하고 시작'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleStartWithoutCamera}
+                      size="lg"
+                      fullWidth
+                    >
+                      카메라 없이 시작
+                    </Button>
+                  </div>
+
+                  <p className="text-xs text-[var(--neutral-400)] mt-4">
+                    카메라는 언제든 끌 수 있으며, 영상은 저장되지 않습니다.
+                  </p>
+                </div>
+              </Card>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -240,6 +376,31 @@ export default function AssessmentPage() {
     return (
       <div className="min-h-screen bg-[var(--neutral-50)] py-6 px-4">
         <div className="max-w-3xl mx-auto">
+          {/* 카메라 미리보기 (활성화된 경우) */}
+          {isCameraActive && (
+            <div className="fixed top-4 right-4 z-40">
+              <div className="relative">
+                <video
+                  ref={videoRef}
+                  className="w-24 h-24 rounded-full object-cover border-2 border-white shadow-lg"
+                  autoPlay
+                  playsInline
+                  muted
+                />
+                <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 shadow-md">
+                  <span className="text-lg">{emotionIcons[currentEmotion]}</span>
+                </div>
+                <button
+                  onClick={stopDetection}
+                  className="absolute -top-1 -left-1 w-5 h-5 bg-[var(--neutral-800)] text-white rounded-full text-xs flex items-center justify-center hover:bg-[var(--danger)] transition-colors"
+                  title="카메라 끄기"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 상단 진행률 */}
           <div className="mb-6">
             <AssessmentProgress
@@ -259,6 +420,8 @@ export default function AssessmentPage() {
             onTimeUp={handleTimeUp}
             timerRunning={!isSubmitting}
             disabled={isSubmitting}
+            inputRef={inputRef}
+            questionIndex={currentQuestionIndex}
           />
 
           {/* 하단 네비게이션 */}
@@ -278,6 +441,16 @@ export default function AssessmentPage() {
               문항 {currentQuestionIndex + 1} / {questions.length}
             </span>
           </div>
+
+          {/* 카메라 없음 안내 (하단) */}
+          {!isCameraActive && (
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40">
+              <div className="bg-[var(--neutral-800)] text-white px-4 py-2 rounded-full text-sm flex items-center gap-2 shadow-lg">
+                <span>📷</span>
+                <span>카메라 없이 진행 중</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

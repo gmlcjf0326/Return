@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button, Card, CardContent, StatusBadge, DataPanel } from '@/components/ui';
-import { LineChart, BarChart, TrendIndicator } from '@/components/charts';
+import { TrendIndicator } from '@/components/charts';
 import { useSessionStore } from '@/store/sessionStore';
 
 interface SummaryData {
@@ -343,6 +343,148 @@ export default function AnalyticsPage() {
               </section>
             )}
 
+            {/* 호전 상황 요약 */}
+            {trends?.hasData && trends.trends.length > 1 && summary?.changes && (
+              <section>
+                <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                  호전 상황 분석
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  {/* 최근 변화 */}
+                  <Card className={`p-6 ${summary.changes.totalScore >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-slate-600">이전 대비 변화</span>
+                      <span className={`text-2xl ${summary.changes.totalScore >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {summary.changes.totalScore >= 0 ? '📈' : '📉'}
+                      </span>
+                    </div>
+                    <div className="text-3xl font-bold mb-1" style={{
+                      color: summary.changes.totalScore >= 0 ? 'var(--success)' : 'var(--danger)'
+                    }}>
+                      {summary.changes.totalScore >= 0 ? '+' : ''}{summary.changes.totalScore}점
+                    </div>
+                    <p className="text-sm text-slate-500">
+                      {summary.changes.totalScore > 5 ? '큰 폭으로 향상되었습니다!' :
+                       summary.changes.totalScore > 0 ? '조금씩 나아지고 있습니다.' :
+                       summary.changes.totalScore === 0 ? '점수가 유지되고 있습니다.' :
+                       summary.changes.totalScore > -5 ? '약간 하락했습니다. 집중 훈련이 필요합니다.' :
+                       '점수가 하락했습니다. 전문 상담을 권장합니다.'}
+                    </p>
+                  </Card>
+
+                  {/* 향상된 영역 */}
+                  <Card className="p-6 bg-blue-50 border-blue-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-slate-600">향상된 영역</span>
+                      <span className="text-2xl">✨</span>
+                    </div>
+                    <div className="space-y-1">
+                      {Object.entries(summary.changes)
+                        .filter(([key, value]) => key !== 'totalScore' && value > 0)
+                        .sort((a, b) => (b[1] as number) - (a[1] as number))
+                        .slice(0, 3)
+                        .map(([key, value]) => {
+                          const categoryNames: Record<string, string> = {
+                            memoryScore: '기억력',
+                            calculationScore: '계산력',
+                            languageScore: '언어력',
+                            attentionScore: '주의력',
+                            executiveScore: '실행력',
+                            visuospatialScore: '공간지각력',
+                          };
+                          return (
+                            <div key={key} className="flex items-center justify-between text-sm">
+                              <span className="text-blue-700">{categoryNames[key] || key}</span>
+                              <span className="text-green-600 font-medium">+{value}</span>
+                            </div>
+                          );
+                        })}
+                      {Object.entries(summary.changes).filter(([key, value]) => key !== 'totalScore' && value > 0).length === 0 && (
+                        <p className="text-sm text-blue-600">아직 향상된 영역이 없습니다</p>
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* 주의 영역 */}
+                  <Card className="p-6 bg-amber-50 border-amber-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-slate-600">집중 필요 영역</span>
+                      <span className="text-2xl">⚠️</span>
+                    </div>
+                    <div className="space-y-1">
+                      {Object.entries(summary.changes)
+                        .filter(([key, value]) => key !== 'totalScore' && value < 0)
+                        .sort((a, b) => (a[1] as number) - (b[1] as number))
+                        .slice(0, 3)
+                        .map(([key, value]) => {
+                          const categoryNames: Record<string, string> = {
+                            memoryScore: '기억력',
+                            calculationScore: '계산력',
+                            languageScore: '언어력',
+                            attentionScore: '주의력',
+                            executiveScore: '실행력',
+                            visuospatialScore: '공간지각력',
+                          };
+                          return (
+                            <div key={key} className="flex items-center justify-between text-sm">
+                              <span className="text-amber-700">{categoryNames[key] || key}</span>
+                              <span className="text-red-600 font-medium">{value}</span>
+                            </div>
+                          );
+                        })}
+                      {Object.entries(summary.changes).filter(([key, value]) => key !== 'totalScore' && value < 0).length === 0 && (
+                        <p className="text-sm text-amber-600">모든 영역이 유지 또는 향상 중</p>
+                      )}
+                    </div>
+                  </Card>
+                </div>
+
+                {/* 종합 호전 상황 메시지 */}
+                <Card className={`p-6 mb-6 ${
+                  summary.changes.totalScore > 5 ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200' :
+                  summary.changes.totalScore >= 0 ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200' :
+                  'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'
+                }`}>
+                  <div className="flex items-center gap-4">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl ${
+                      summary.changes.totalScore > 5 ? 'bg-green-100' :
+                      summary.changes.totalScore >= 0 ? 'bg-blue-100' :
+                      'bg-amber-100'
+                    }`}>
+                      {summary.changes.totalScore > 5 ? '🎉' :
+                       summary.changes.totalScore >= 0 ? '👍' : '💪'}
+                    </div>
+                    <div>
+                      <h3 className={`font-semibold text-lg ${
+                        summary.changes.totalScore > 5 ? 'text-green-800' :
+                        summary.changes.totalScore >= 0 ? 'text-blue-800' :
+                        'text-amber-800'
+                      }`}>
+                        {summary.changes.totalScore > 5 ? '훌륭해요! 크게 향상되었습니다!' :
+                         summary.changes.totalScore > 0 ? '좋아요! 점진적으로 향상 중입니다.' :
+                         summary.changes.totalScore === 0 ? '안정적으로 유지되고 있습니다.' :
+                         '집중 훈련으로 다시 향상시킬 수 있습니다!'}
+                      </h3>
+                      <p className={`text-sm ${
+                        summary.changes.totalScore > 5 ? 'text-green-600' :
+                        summary.changes.totalScore >= 0 ? 'text-blue-600' :
+                        'text-amber-600'
+                      }`}>
+                        {summary.changes.totalScore > 5 ? '꾸준한 훈련의 효과가 나타나고 있습니다. 이 추세를 유지하세요!' :
+                         summary.changes.totalScore > 0 ? '규칙적인 훈련을 지속하면 더 큰 향상을 기대할 수 있습니다.' :
+                         summary.changes.totalScore === 0 ? '취약 영역에 집중하면 전체 점수 향상에 도움이 됩니다.' :
+                         '취약 영역을 파악하고 맞춤형 훈련에 집중해보세요.'}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              </section>
+            )}
+
             {/* 점수 추이 그래프 */}
             {trends?.hasData && trends.trends.length > 1 && (
               <section>
@@ -355,16 +497,20 @@ export default function AnalyticsPage() {
 
                 <Card className="p-6">
                   <h3 className="text-base font-semibold text-slate-700 mb-4">종합 점수 추이</h3>
-                  <LineChart
-                    data={trends.trends.map((t) => ({
-                      label: `${t.index}회차`,
-                      value: t.totalScore,
-                    }))}
-                    height={250}
-                    color="#3B82F6"
-                    maxValue={100}
-                    minValue={0}
-                  />
+                  <div className="space-y-3">
+                    {trends.trends.map((t, i) => (
+                      <div key={i} className="flex items-center gap-4">
+                        <span className="text-sm text-slate-500 w-16">{t.index}회차</span>
+                        <div className="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-blue-500 rounded-full transition-all"
+                            style={{ width: `${t.totalScore}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-semibold text-slate-700 w-12 text-right">{t.totalScore}점</span>
+                      </div>
+                    ))}
+                  </div>
                 </Card>
 
                 {/* 영역별 변화 */}
@@ -410,38 +556,51 @@ export default function AnalyticsPage() {
                   {/* 유형별 통계 */}
                   <Card className="p-6">
                     <h3 className="text-base font-semibold text-slate-700 mb-4">훈련 유형별 현황</h3>
-                    <BarChart
-                      data={trainingStats.byType.map((t) => ({
-                        label: t.label.replace(' 게임', ''),
-                        value: t.count,
-                        color: t.type === 'memory' ? '#8B5CF6' : t.type === 'calculation' ? '#3B82F6' : '#10B981',
-                      }))}
-                      height={200}
-                      showValues
-                    />
-                    <div className="mt-4 space-y-2">
-                      {trainingStats.byType.map((t) => (
-                        <div key={t.type} className="flex justify-between text-sm">
-                          <span className="text-slate-600">{t.label}</span>
-                          <span className="text-slate-500">{t.count}회 / {t.totalMinutes}분</span>
-                        </div>
-                      ))}
+                    <div className="space-y-4">
+                      {trainingStats.byType.map((t) => {
+                        const maxCount = Math.max(...trainingStats.byType.map(x => x.count)) || 1;
+                        const percentage = (t.count / maxCount) * 100;
+                        const color = t.type === 'memory' ? 'bg-purple-500' : t.type === 'calculation' ? 'bg-blue-500' : 'bg-green-500';
+                        return (
+                          <div key={t.type}>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm font-medium text-slate-600">{t.label}</span>
+                              <span className="text-sm text-slate-500">{t.count}회 / {t.totalMinutes}분</span>
+                            </div>
+                            <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${color}`}
+                                style={{ width: `${percentage}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </Card>
 
                   {/* 주간 활동 */}
                   <Card className="p-6">
                     <h3 className="text-base font-semibold text-slate-700 mb-4">주간 활동량</h3>
-                    <BarChart
-                      data={trainingStats.weeklyActivity.map((w) => ({
-                        label: w.dayLabel,
-                        value: w.minutes,
-                        color: w.minutes > 0 ? '#3B82F6' : '#E2E8F0',
-                      }))}
-                      height={200}
-                      showValues
-                    />
-                    <div className="mt-4 text-center">
+                    <div className="grid grid-cols-7 gap-2">
+                      {trainingStats.weeklyActivity.map((w, i) => {
+                        const maxMinutes = Math.max(...trainingStats.weeklyActivity.map(x => x.minutes)) || 1;
+                        const heightPercent = w.minutes > 0 ? Math.max((w.minutes / maxMinutes) * 100, 10) : 0;
+                        return (
+                          <div key={i} className="flex flex-col items-center">
+                            <div className="w-full h-24 flex items-end justify-center mb-2">
+                              <div
+                                className={`w-8 rounded-t transition-all ${w.minutes > 0 ? 'bg-blue-500' : 'bg-slate-200'}`}
+                                style={{ height: `${heightPercent}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-500">{w.dayLabel}</span>
+                            <span className="text-xs font-medium text-slate-700">{w.minutes}분</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-4 text-center border-t pt-4">
                       <p className="text-sm text-slate-500">
                         주간 총 훈련 시간:{' '}
                         <span className="font-semibold text-slate-700">

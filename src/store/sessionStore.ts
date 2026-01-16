@@ -157,7 +157,7 @@ export const useSessionStore = create<SessionState>()(
       },
     }),
     {
-      name: 'rememory-session',
+      name: 'return-session',
       partialize: (state) => ({ session: state.session }),
     }
   )

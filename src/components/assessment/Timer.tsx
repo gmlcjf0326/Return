@@ -15,6 +15,8 @@ interface TimerProps {
   size?: 'sm' | 'md' | 'lg';
   /** 경고 임계값 (초) - 이 시간 이하로 남으면 빨간색으로 변경 */
   warningThreshold?: number;
+  /** 문항 인덱스 - 문항 변경 시 타이머 리셋용 */
+  questionIndex?: number;
 }
 
 export default function Timer({
@@ -24,40 +26,45 @@ export default function Timer({
   onTick,
   size = 'md',
   warningThreshold = 10,
+  questionIndex,
 }: TimerProps) {
   const [remainingSeconds, setRemainingSeconds] = useState(duration);
 
-  // 타이머 리셋
+  // 타이머 리셋 - duration 또는 questionIndex 변경 시 리셋
   useEffect(() => {
     setRemainingSeconds(duration);
-  }, [duration]);
+  }, [duration, questionIndex]);
 
-  // 타이머 로직
+  // 타이머 로직 - 상태 업데이트만 수행
   useEffect(() => {
     if (!isRunning) return;
 
     const interval = setInterval(() => {
       setRemainingSeconds((prev) => {
-        const newValue = prev - 1;
-
-        if (onTick) {
-          onTick(newValue);
-        }
-
-        if (newValue <= 0) {
+        if (prev <= 1) {
           clearInterval(interval);
-          if (onTimeUp) {
-            onTimeUp();
-          }
           return 0;
         }
-
-        return newValue;
+        return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning, onTimeUp, onTick]);
+  }, [isRunning]);
+
+  // onTick 콜백 - 렌더링 후 별도로 실행
+  useEffect(() => {
+    if (isRunning && onTick) {
+      onTick(remainingSeconds);
+    }
+  }, [remainingSeconds, isRunning, onTick]);
+
+  // onTimeUp 콜백 - 시간이 0이 되면 실행
+  useEffect(() => {
+    if (remainingSeconds === 0 && onTimeUp) {
+      onTimeUp();
+    }
+  }, [remainingSeconds, onTimeUp]);
 
   // 시간 포맷팅 (MM:SS)
   const formatTime = useCallback((seconds: number) => {

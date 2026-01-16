@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAssessmentStore } from '@/store/assessmentStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -16,15 +16,73 @@ import { categoryConfig } from '@/data/assessment-questions';
 import type { CognitiveCategory } from '@/data/assessment-questions';
 import Card, { CardHeader, CardContent, CardFooter } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { RadarChart, formatCognitiveData } from '@/components/charts';
+import { BehaviorMetrics } from '@/components/charts';
+
+// 헬퍼 함수들
+function calculateVariance(arr: number[]): number {
+  if (!arr || arr.length === 0) return 0;
+  const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+  const squaredDiffs = arr.map(x => Math.pow(x - avg, 2));
+  return squaredDiffs.reduce((a, b) => a + b, 0) / squaredDiffs.length;
+}
+
+function calculateEmotionDistribution(timeline: Array<{ emotion: string }>) {
+  if (!timeline || timeline.length === 0) return [];
+
+  const counts: Record<string, number> = {};
+  timeline.forEach(item => {
+    counts[item.emotion] = (counts[item.emotion] || 0) + 1;
+  });
+
+  const total = timeline.length;
+  return Object.entries(counts)
+    .map(([emotion, count]) => ({
+      emotion,
+      count,
+      percentage: Math.round((count / total) * 100),
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function getDominantEmotion(timeline: Array<{ emotion: string }>): string {
+  const distribution = calculateEmotionDistribution(timeline);
+  return distribution.length > 0 ? distribution[0].emotion : 'neutral';
+}
+
+// 행동 데이터 타입
+interface BehaviorDataType {
+  responseTime: number[];
+  hesitationCount: number;
+  correctionCount: number;
+  avgResponseTime: number;
+  maxResponseTime?: number;
+  minResponseTime?: number;
+  responseTimeVariance?: number;
+  emotionTimeline?: Array<{ timestamp: number; emotion: string; confidence: number; questionIndex?: number }>;
+  emotionDistribution?: Array<{ emotion: string; count: number; percentage: number }>;
+  dominantEmotion?: string;
+  postureTimeline?: Array<{ timestamp: number; posture: string; tiltAngle: number }>;
+  postureStats?: {
+    uprightPercentage: number;
+    leftTiltPercentage: number;
+    rightTiltPercentage: number;
+    slouchingPercentage: number;
+    totalTiltCount: number;
+    avgTiltDuration: number;
+  } | null;
+  mouseHeatmap?: Array<{ x: number; y: number; intensity: number }>;
+  contentInterests?: Array<{ region: string; hoverTime: number; clickCount: number; percentage: number }>;
+}
 
 export default function AssessmentResultPage() {
   const router = useRouter();
   const { session } = useSessionStore();
   const sessionId = session?.id;
-  const { responses, startTime, isCompleted, resetAssessment } = useAssessmentStore();
+  const { responses, startTime, isCompleted, resetAssessment, behaviorData: storeBehaviorData } = useAssessmentStore();
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showBehaviorSection, setShowBehaviorSection] = useState(true);
+  const hasSavedRef = useRef(false);
 
   // 세션 없으면 홈으로
   useEffect(() => {
@@ -58,9 +116,47 @@ export default function AssessmentResultPage() {
     return calculateAssessmentResult(questionResponses, startTime, Date.now());
   }, [responses, startTime]);
 
-  // 결과 서버에 저장
+  // 행동 데이터 계산
+  const behaviorData: BehaviorDataType | null = useMemo(() => {
+    if (!responses || responses.length === 0) return null;
+
+    const responseTimes = responses.map(r => r.responseTime);
+    const avgResponseTime = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
+
+    return {
+      responseTime: responseTimes,
+      hesitationCount: storeBehaviorData?.hesitationCount || 0,
+      correctionCount: storeBehaviorData?.correctionCount || 0,
+      avgResponseTime: Math.round(avgResponseTime),
+      maxResponseTime: Math.max(...responseTimes),
+      minResponseTime: Math.min(...responseTimes),
+      responseTimeVariance: calculateVariance(responseTimes),
+      emotionTimeline: storeBehaviorData?.emotionTimeline || [],
+      emotionDistribution: calculateEmotionDistribution(storeBehaviorData?.emotionTimeline || []),
+      dominantEmotion: getDominantEmotion(storeBehaviorData?.emotionTimeline || []),
+      postureTimeline: [],
+      postureStats: null,
+      mouseHeatmap: [],
+      contentInterests: [],
+    };
+  }, [responses, storeBehaviorData]);
+
+  // 응답 시간 차트 데이터
+  const responseTimeChartData = useMemo(() => {
+    if (!responses || responses.length === 0) return [];
+
+    return responses.map((r, index) => ({
+      questionIndex: index,
+      responseTime: r.responseTime,
+      isCorrect: r.isCorrect,
+      category: r.questionId.split('-')[0],
+    }));
+  }, [responses]);
+
+  // 결과 서버에 저장 (한 번만 실행)
   useEffect(() => {
-    if (result && sessionId && !isSaving) {
+    if (result && sessionId && !hasSavedRef.current) {
+      hasSavedRef.current = true;
       setIsSaving(true);
       setSaveError(null);
 
@@ -70,6 +166,17 @@ export default function AssessmentResultPage() {
         body: JSON.stringify({
           sessionId,
           ...result,
+          behaviorData: behaviorData ? {
+            hesitationCount: behaviorData.hesitationCount,
+            correctionCount: behaviorData.correctionCount,
+            emotionTimeline: behaviorData.emotionTimeline,
+            emotionDistribution: behaviorData.emotionDistribution,
+            dominantEmotion: behaviorData.dominantEmotion,
+            postureTimeline: behaviorData.postureTimeline,
+            postureStats: behaviorData.postureStats,
+            mouseHeatmap: behaviorData.mouseHeatmap,
+            contentInterests: behaviorData.contentInterests,
+          } : undefined,
         }),
       })
         .then((res) => {
@@ -85,7 +192,7 @@ export default function AssessmentResultPage() {
           setIsSaving(false);
         });
     }
-  }, [result, sessionId, isSaving]);
+  }, [result, sessionId, behaviorData]);
 
   if (!result) {
     return (
@@ -168,26 +275,40 @@ export default function AssessmentResultPage() {
           </div>
         </Card>
 
-        {/* 레이더 차트 */}
+        {/* 인지 기능 분포 */}
         <Card variant="bordered" padding="md" className="mb-6">
           <CardHeader
             title="인지 기능 분포"
-            subtitle="6개 영역 레이더 차트"
+            subtitle="6개 영역 분석"
           />
           <CardContent>
-            <div className="flex justify-center py-4">
-              <RadarChart
-                data={formatCognitiveData(
-                  result.categoryScores.map((cs) => ({
-                    ...cs,
-                    icon: categoryConfig[cs.category]?.icon,
-                  }))
-                )}
-                size={320}
-                colorScheme="risk"
-                showLabels={true}
-                showValues={true}
-              />
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 py-4">
+              {result.categoryScores.map((cs) => {
+                const config = categoryConfig[cs.category];
+                const bgColor =
+                  cs.percentage >= 85
+                    ? 'bg-green-50 border-green-200'
+                    : cs.percentage >= 70
+                      ? 'bg-yellow-50 border-yellow-200'
+                      : cs.percentage >= 55
+                        ? 'bg-orange-50 border-orange-200'
+                        : 'bg-red-50 border-red-200';
+                const textColor =
+                  cs.percentage >= 85
+                    ? 'text-green-700'
+                    : cs.percentage >= 70
+                      ? 'text-yellow-700'
+                      : cs.percentage >= 55
+                        ? 'text-orange-700'
+                        : 'text-red-700';
+                return (
+                  <div key={cs.category} className={`p-4 rounded-xl border ${bgColor} text-center`}>
+                    <span className="text-2xl block mb-2">{config.icon}</span>
+                    <p className="text-sm font-medium text-[var(--neutral-700)]">{cs.name}</p>
+                    <p className={`text-2xl font-bold ${textColor}`}>{cs.percentage}%</p>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -360,6 +481,170 @@ export default function AssessmentResultPage() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* 행동 분석 섹션 토글 */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowBehaviorSection(!showBehaviorSection)}
+            className="w-full flex items-center justify-between p-4 bg-white rounded-xl border border-[var(--neutral-200)] hover:bg-[var(--neutral-50)] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📊</span>
+              <div className="text-left">
+                <h3 className="font-semibold text-[var(--neutral-800)]">행동 분석 결과</h3>
+                <p className="text-sm text-[var(--neutral-500)]">
+                  응답 시간, 망설임, 수정 횟수 등 상세 행동 데이터
+                </p>
+              </div>
+            </div>
+            <span className={`text-2xl transition-transform ${showBehaviorSection ? 'rotate-180' : ''}`}>
+              ▼
+            </span>
+          </button>
+        </div>
+
+        {/* 행동 분석 상세 섹션 */}
+        {showBehaviorSection && behaviorData && (
+          <div className="space-y-6 mb-6">
+            {/* 행동 지표 카드 */}
+            <BehaviorMetrics
+              data={{
+                hesitationCount: behaviorData.hesitationCount,
+                correctionCount: behaviorData.correctionCount,
+                avgResponseTime: behaviorData.avgResponseTime,
+                maxResponseTime: behaviorData.maxResponseTime,
+                minResponseTime: behaviorData.minResponseTime,
+                responseTimeVariance: behaviorData.responseTimeVariance,
+              }}
+              className="border border-[var(--neutral-200)]"
+            />
+
+            {/* 응답 시간 분석 */}
+            {responseTimeChartData.length > 0 && (
+              <Card variant="bordered" padding="md">
+                <h3 className="text-lg font-semibold text-[var(--neutral-800)] mb-4">📈 문항별 응답 시간</h3>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {responseTimeChartData.map((item, i) => {
+                    const timeInSec = (item.responseTime / 1000).toFixed(1);
+                    const avgInSec = behaviorData.avgResponseTime / 1000;
+                    const isAboveAvg = item.responseTime > behaviorData.avgResponseTime;
+                    return (
+                      <div key={i} className="flex items-center gap-3">
+                        <span className="text-sm text-[var(--neutral-500)] w-16">문항 {item.questionIndex + 1}</span>
+                        <div className="flex-1 h-4 bg-[var(--neutral-100)] rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${item.isCorrect === false ? 'bg-red-400' : 'bg-blue-400'}`}
+                            style={{ width: `${Math.min((item.responseTime / (avgInSec * 2 * 1000)) * 100, 100)}%` }}
+                          />
+                        </div>
+                        <span className={`text-sm font-medium w-16 text-right ${isAboveAvg ? 'text-orange-600' : 'text-green-600'}`}>
+                          {timeInSec}초
+                        </span>
+                        {item.isCorrect === false && <span className="text-xs text-red-500">오답</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 pt-3 border-t border-[var(--neutral-200)] flex items-center justify-between">
+                  <span className="text-sm text-[var(--neutral-500)]">평균 응답 시간</span>
+                  <span className="font-semibold text-[var(--neutral-700)]">{(behaviorData.avgResponseTime / 1000).toFixed(1)}초</span>
+                </div>
+              </Card>
+            )}
+
+            {/* 감정 분포 (데이터가 있는 경우) */}
+            {behaviorData.emotionDistribution && behaviorData.emotionDistribution.length > 0 && (
+              <Card variant="bordered" padding="md">
+                <h3 className="text-lg font-semibold text-[var(--neutral-800)] mb-4">😊 감정/표정 분포</h3>
+                <div className="space-y-3">
+                  {behaviorData.emotionDistribution.map((item, i) => {
+                    const emotionEmoji: Record<string, string> = {
+                      happy: '😊', sad: '😢', angry: '😠', surprised: '😲',
+                      neutral: '😐', fearful: '😨', disgusted: '🤢'
+                    };
+                    const emotionLabel: Record<string, string> = {
+                      happy: '행복', sad: '슬픔', angry: '화남', surprised: '놀람',
+                      neutral: '중립', fearful: '두려움', disgusted: '혐오'
+                    };
+                    return (
+                      <div key={i} className="flex items-center gap-3">
+                        <span className="text-2xl w-8">{emotionEmoji[item.emotion] || '😐'}</span>
+                        <span className="text-sm text-[var(--neutral-600)] w-16">{emotionLabel[item.emotion] || item.emotion}</span>
+                        <div className="flex-1 h-4 bg-[var(--neutral-100)] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-purple-400 rounded-full"
+                            style={{ width: `${item.percentage}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-medium text-[var(--neutral-700)] w-12 text-right">{item.percentage}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {/* 자세 분석 (데이터가 있는 경우) */}
+            {behaviorData.postureStats && (
+              <Card variant="bordered" padding="md">
+                <h3 className="text-lg font-semibold text-[var(--neutral-800)] mb-4">🧘 자세 분석</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-3 bg-green-50 rounded-xl">
+                    <p className="text-2xl font-bold text-green-600">{behaviorData.postureStats.uprightPercentage}%</p>
+                    <p className="text-sm text-[var(--neutral-600)]">바른 자세</p>
+                  </div>
+                  <div className="text-center p-3 bg-yellow-50 rounded-xl">
+                    <p className="text-2xl font-bold text-yellow-600">{behaviorData.postureStats.leftTiltPercentage}%</p>
+                    <p className="text-sm text-[var(--neutral-600)]">왼쪽 기울임</p>
+                  </div>
+                  <div className="text-center p-3 bg-yellow-50 rounded-xl">
+                    <p className="text-2xl font-bold text-yellow-600">{behaviorData.postureStats.rightTiltPercentage}%</p>
+                    <p className="text-sm text-[var(--neutral-600)]">오른쪽 기울임</p>
+                  </div>
+                  <div className="text-center p-3 bg-orange-50 rounded-xl">
+                    <p className="text-2xl font-bold text-orange-600">{behaviorData.postureStats.slouchingPercentage}%</p>
+                    <p className="text-sm text-[var(--neutral-600)]">구부정</p>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {/* 관심도 분석 (데이터가 있는 경우) */}
+            {behaviorData.contentInterests && behaviorData.contentInterests.length > 0 && (
+              <Card variant="bordered" padding="md">
+                <h3 className="text-lg font-semibold text-[var(--neutral-800)] mb-4">🔍 콘텐츠 관심도</h3>
+                <div className="space-y-3">
+                  {behaviorData.contentInterests.map((item, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="text-sm text-[var(--neutral-600)] w-24">{item.region}</span>
+                      <div className="flex-1 h-4 bg-[var(--neutral-100)] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-teal-400 rounded-full"
+                          style={{ width: `${item.percentage}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium text-[var(--neutral-700)] w-12 text-right">{item.percentage}%</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* 데이터가 충분하지 않은 경우 안내 */}
+            {(!behaviorData.emotionDistribution || behaviorData.emotionDistribution.length === 0) &&
+              !behaviorData.postureStats && (
+              <div className="p-6 bg-[var(--info)]/10 rounded-xl text-center">
+                <span className="text-3xl mb-2 block">📹</span>
+                <p className="text-[var(--info)] font-medium">
+                  표정/자세 분석 데이터가 없습니다
+                </p>
+                <p className="text-sm text-[var(--neutral-500)] mt-1">
+                  다음 평가에서 웹캠을 활성화하면 더 상세한 행동 분석을 받아볼 수 있습니다.
+                </p>
+              </div>
+            )}
+          </div>
         )}
 
         {/* 소요 시간 */}

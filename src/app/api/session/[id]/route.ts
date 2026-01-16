@@ -25,13 +25,23 @@ export async function GET(
       return NextResponse.json(response, { status: 404 });
     }
 
+    // profileData JSON 파싱
+    let parsedProfileData: Session['profileData'] = undefined;
+    if (session.profileData) {
+      try {
+        parsedProfileData = JSON.parse(session.profileData);
+      } catch {
+        parsedProfileData = undefined;
+      }
+    }
+
     const response: ApiResponse<Session> = {
       success: true,
       data: {
         id: session.id,
         nickname: session.nickname ?? undefined,
         birthYear: session.birthYear ?? undefined,
-        profileData: session.profileData as Session['profileData'],
+        profileData: parsedProfileData,
         createdAt: session.createdAt,
         lastActiveAt: session.lastActiveAt ?? undefined,
       },
@@ -70,16 +80,26 @@ export async function PATCH(
         id,
         nickname: nickname ?? null,
         birthYear: birthYear ?? null,
-        profileData: profileData ?? null,
+        profileData: profileData ? JSON.stringify(profileData) : null,
         lastActiveAt: lastActiveAt ? new Date(lastActiveAt) : new Date(),
       },
       update: {
         ...(nickname !== undefined && { nickname }),
         ...(birthYear !== undefined && { birthYear }),
-        ...(profileData !== undefined && { profileData }),
+        ...(profileData !== undefined && { profileData: JSON.stringify(profileData) }),
         lastActiveAt: lastActiveAt ? new Date(lastActiveAt) : new Date(),
       },
     });
+
+    // profileData JSON 파싱
+    let parsedProfileData: Session['profileData'] = undefined;
+    if (session.profileData) {
+      try {
+        parsedProfileData = JSON.parse(session.profileData);
+      } catch {
+        parsedProfileData = undefined;
+      }
+    }
 
     const response: ApiResponse<Session> = {
       success: true,
@@ -87,7 +107,7 @@ export async function PATCH(
         id: session.id,
         nickname: session.nickname ?? undefined,
         birthYear: session.birthYear ?? undefined,
-        profileData: session.profileData as Session['profileData'],
+        profileData: parsedProfileData,
         createdAt: session.createdAt,
         lastActiveAt: session.lastActiveAt ?? undefined,
       },

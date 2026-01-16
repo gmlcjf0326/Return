@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSessionStore } from '@/store/sessionStore';
 import { Button, Card, CardHeader, CardContent, DataPanel, StatusBadge } from '@/components/ui';
+import { DemoModal, DemoPlayer, CardPlayButton, type DemoType, type AutoplayDemoType } from '@/components/demos';
 
 export default function Home() {
   const router = useRouter();
   const { session, isInitialized, initSession } = useSessionStore();
+  const [activeDemo, setActiveDemo] = useState<DemoType | null>(null);
+  const [autoplayDemo, setAutoplayDemo] = useState<AutoplayDemoType | null>(null);
 
   useEffect(() => {
     if (!isInitialized) {
@@ -44,7 +47,8 @@ export default function Home() {
           <h3 className="text-xl font-bold text-[var(--neutral-800)] mb-4">주요 기능</h3>
           <div className="grid md:grid-cols-2 gap-6">
             {/* Cognitive Assessment Card */}
-            <Card className="hover:shadow-lg transition-shadow">
+            <Card className="hover:shadow-lg transition-shadow relative">
+              <CardPlayButton onClick={() => setAutoplayDemo('assessment')} variant="primary" />
               <CardHeader>
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 bg-[var(--primary-light)]/20 rounded-xl flex items-center justify-center">
@@ -71,22 +75,32 @@ export default function Home() {
                   <StatusBadge status="info" size="sm">실행기능</StatusBadge>
                   <StatusBadge status="info" size="sm">시공간력</StatusBadge>
                 </div>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  className="w-full"
-                  onClick={() => router.push('/assessment')}
-                >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                  진단 시작하기
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    className="flex-1"
+                    onClick={() => router.push('/assessment')}
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    진단 시작하기
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => setActiveDemo('assessment')}
+                  >
+                    체험하기
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
             {/* Training Card */}
-            <Card className="hover:shadow-lg transition-shadow">
+            <Card className="hover:shadow-lg transition-shadow relative">
+              <CardPlayButton onClick={() => setAutoplayDemo('training')} variant="emerald" />
               <CardHeader>
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 bg-[var(--info-light)] rounded-xl flex items-center justify-center">
@@ -110,20 +124,79 @@ export default function Home() {
                   <StatusBadge status="normal" size="sm">계산력 퍼즐</StatusBadge>
                   <StatusBadge status="normal" size="sm">회상 대화</StatusBadge>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  className="w-full"
-                  onClick={() => router.push('/training')}
-                >
-                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  훈련 시작하기
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    className="flex-1"
+                    onClick={() => router.push('/training')}
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    훈련 시작하기
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => setActiveDemo('memory')}
+                  >
+                    체험하기
+                  </Button>
+                </div>
               </CardContent>
             </Card>
+          </div>
+        </section>
+
+        {/* Demo Section */}
+        <section className="mb-8">
+          <h3 className="text-xl font-bold text-[var(--neutral-800)] mb-4">훈련 체험해보기</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <button
+              onClick={() => setActiveDemo('memory')}
+              className="p-4 bg-white rounded-xl border border-[var(--neutral-200)] hover:shadow-md transition-all text-center group"
+            >
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                <span className="text-2xl">🎴</span>
+              </div>
+              <h5 className="font-semibold text-[var(--neutral-700)]">기억력 게임</h5>
+              <p className="text-xs text-[var(--neutral-500)] mt-1">카드 매칭</p>
+            </button>
+
+            <button
+              onClick={() => setActiveDemo('calculation')}
+              className="p-4 bg-white rounded-xl border border-[var(--neutral-200)] hover:shadow-md transition-all text-center group"
+            >
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                <span className="text-2xl">🔢</span>
+              </div>
+              <h5 className="font-semibold text-[var(--neutral-700)]">계산력 게임</h5>
+              <p className="text-xs text-[var(--neutral-500)] mt-1">수학 문제</p>
+            </button>
+
+            <button
+              onClick={() => setActiveDemo('language')}
+              className="p-4 bg-white rounded-xl border border-[var(--neutral-200)] hover:shadow-md transition-all text-center group"
+            >
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                <span className="text-2xl">📖</span>
+              </div>
+              <h5 className="font-semibold text-[var(--neutral-700)]">언어력 게임</h5>
+              <p className="text-xs text-[var(--neutral-500)] mt-1">단어 퍼즐</p>
+            </button>
+
+            <button
+              onClick={() => setActiveDemo('reminiscence')}
+              className="p-4 bg-white rounded-xl border border-[var(--neutral-200)] hover:shadow-md transition-all text-center group"
+            >
+              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                <span className="text-2xl">💬</span>
+              </div>
+              <h5 className="font-semibold text-[var(--neutral-700)]">회상 대화</h5>
+              <p className="text-xs text-[var(--neutral-500)] mt-1">추억 이야기</p>
+            </button>
           </div>
         </section>
 
@@ -229,6 +302,16 @@ export default function Home() {
           </Card>
         </section>
       </div>
+
+      {/* Demo Modal */}
+      {activeDemo && (
+        <DemoModal type={activeDemo} onClose={() => setActiveDemo(null)} />
+      )}
+
+      {/* Autoplay Demo Player */}
+      {autoplayDemo && (
+        <DemoPlayer type={autoplayDemo} onClose={() => setAutoplayDemo(null)} />
+      )}
     </div>
   );
 }

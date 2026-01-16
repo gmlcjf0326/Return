@@ -1,10 +1,19 @@
+/**
+ * 회상 대화 시작 API
+ * TODO: [REAL_DATA] 실제 데이터베이스 연동 시 prisma 로직 활성화
+ * TODO: [LLM_API] 실제 LLM API 연동
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { generateReminiscenceQuestions } from '@/lib/ai/vision';
+import { generateInitialQuestion } from '@/lib/ai/llm';
+import { getRandomInitialQuestion, getRandomFollowUpQuestion } from '@/data/reminiscenceQuestions';
+import type { PhotoData, PhotoCategory } from '@/components/photos/PhotoCard';
 
 export async function POST(request: NextRequest) {
   try {
-    const { photoId, sessionId } = await request.json();
+    const body = await request.json();
+    const { photoId, sessionId, photoData } = body;
 
     if (!photoId || !sessionId) {
       return NextResponse.json(
@@ -13,10 +22,43 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 사진 정보 조회
-    const photo = await prisma.photo.findUnique({
-      where: { id: parseInt(photoId, 10) },
-    });
+    let photo: PhotoData | null = null;
+    let autoTags: PhotoData['autoTags'] = undefined;
+
+    // 클라이언트에서 전달된 photoData가 있으면 사용 (더미 데이터 지원)
+    if (photoData) {
+      photo = photoData as PhotoData;
+      autoTags = photo.autoTags;
+    } else {
+      // TODO: [REAL_DATA] 데이터베이스에서 사진 조회
+      try {
+        const dbPhoto = await prisma.photo.findUnique({
+          where: { id: parseInt(photoId, 10) },
+        });
+
+        if (dbPhoto && dbPhoto.fileName && dbPhoto.fileUrl) {
+          photo = {
+            id: dbPhoto.id.toString(),
+            fileName: dbPhoto.fileName,
+            fileUrl: dbPhoto.fileUrl,
+            uploadedAt: dbPhoto.createdAt.toISOString(),
+            takenDate: dbPhoto.createdAt?.toISOString(),
+            isAnalyzed: !!dbPhoto.autoTags,
+            autoTags: dbPhoto.autoTags ? JSON.parse(dbPhoto.autoTags) : null,
+          };
+          autoTags = photo.autoTags;
+        }
+      } catch (dbError) {
+        console.error('Database query failed:', dbError);
+        // DB 에러 시 photoData가 없으면 실패
+        if (!photoData) {
+          return NextResponse.json(
+            { error: 'Photo not found' },
+            { status: 404 }
+          );
+        }
+      }
+    }
 
     if (!photo) {
       return NextResponse.json(
@@ -25,41 +67,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!photo.autoTags) {
-      return NextResponse.json(
-        { error: 'Photo has not been analyzed yet' },
-        { status: 400 }
-      );
-    }
-
-    // 세션 정보 조회 (출생년도 등)
-    const session = await prisma.session.findUnique({
-      where: { id: sessionId },
-    });
-
-    const autoTags = JSON.parse(photo.autoTags);
+    // 카테고리 결정
+    const category: PhotoCategory = photo.category || 'daily';
 
     // 회상 질문 생성
-    let questions: string[];
-    try {
-      questions = await generateReminiscenceQuestions(autoTags, {
-        birthYear: session?.birthYear ?? undefined,
-      });
-    } catch (error) {
-      console.error('Failed to generate questions:', error);
-      // 기본 질문 사용
-      questions = [
-        '이 사진에서 무엇이 보이시나요?',
-        '이 장면을 보니 어떤 기분이 드시나요?',
-        '비슷한 경험을 해보신 적이 있으신가요?',
-        '이때 누구와 함께 계셨나요?',
-        '이 사진에서 가장 기억에 남는 것은 무엇인가요?',
-      ];
-    }
+    const questions = generateQuestionSet(category);
 
     // 초기 메시지 생성
-    const greeting = generateGreeting(autoTags);
-    const firstQuestion = questions[0];
+    const greeting = generateGreeting(category, autoTags);
+
+    // TODO: [LLM_API] 실제 LLM으로 초기 질문 생성
+    let firstQuestion: string;
+    try {
+      firstQuestion = await generateInitialQuestion(photo);
+    } catch (error) {
+      console.error('Failed to generate initial question:', error);
+      firstQuestion = getRandomInitialQuestion(category);
+    }
 
     const initialMessage = `${greeting}\n\n${firstQuestion}`;
 
@@ -68,6 +92,7 @@ export async function POST(request: NextRequest) {
       initialMessage,
       questions,
       photoAnalysis: autoTags,
+      category,
     });
   } catch (error) {
     console.error('Failed to start reminiscence session:', error);
@@ -78,33 +103,70 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function generateGreeting(autoTags: {
-  scene: string;
-  peopleCount: number;
-  estimatedEra: string;
-  mood: string;
-  description?: string;
-}): string {
-  const greetings = [
-    '안녕하세요! 함께 이 사진에 대해 이야기해 볼까요?',
-    '이 사진을 보니 참 좋은 추억이 담겨있는 것 같네요.',
-    '이 사진이 정말 인상적이에요. 같이 살펴볼까요?',
-  ];
+/**
+ * 카테고리별 질문 세트 생성
+ */
+function generateQuestionSet(category: PhotoCategory): string[] {
+  const questions: string[] = [];
 
-  let greeting = greetings[Math.floor(Math.random() * greetings.length)];
+  // 초기 질문 2개
+  questions.push(getRandomInitialQuestion(category));
+  questions.push(getRandomInitialQuestion(category));
 
-  // 사진 설명 추가
-  if (autoTags.description) {
-    greeting += `\n\n${autoTags.description}`;
+  // 후속 질문 3개
+  for (let i = 0; i < 3; i++) {
+    questions.push(getRandomFollowUpQuestion(category));
   }
 
-  // 컨텍스트에 따른 추가 설명
-  if (autoTags.scene === '가족모임' || autoTags.scene === '명절') {
-    greeting += '\n\n가족들과 함께한 특별한 순간처럼 보이네요.';
-  } else if (autoTags.scene === '여행') {
-    greeting += '\n\n여행 중 찍은 사진 같아요. 어디로 가셨을까요?';
-  } else if (autoTags.peopleCount > 3) {
-    greeting += `\n\n${autoTags.peopleCount}명이나 함께 계시네요! 모임이 있었나 봐요.`;
+  return questions;
+}
+
+/**
+ * 카테고리별 인사말 생성
+ */
+function generateGreeting(
+  category: PhotoCategory,
+  autoTags?: PhotoData['autoTags']
+): string {
+  const greetings: Record<PhotoCategory, string[]> = {
+    family: [
+      '안녕하세요! 가족분들과 함께한 소중한 사진이네요.',
+      '이 사진을 보니 따뜻한 가족 모임이 느껴져요.',
+      '가족 사진이군요! 정말 행복해 보이세요.',
+    ],
+    travel: [
+      '안녕하세요! 멋진 여행 사진이네요.',
+      '어디로 여행을 가셨는지 궁금해지는 사진이에요.',
+      '정말 아름다운 곳에 다녀오셨네요!',
+    ],
+    event: [
+      '안녕하세요! 특별한 날의 사진 같아요.',
+      '축하할 일이 있으셨나 봐요!',
+      '기념할 만한 순간이 담긴 사진이네요.',
+    ],
+    nature: [
+      '안녕하세요! 아름다운 풍경 사진이네요.',
+      '자연 속에서 찍은 사진이 정말 평화로워 보여요.',
+      '힐링되는 풍경이에요.',
+    ],
+    daily: [
+      '안녕하세요! 일상의 한 장면이 담긴 사진이네요.',
+      '소소하지만 특별한 순간 같아요.',
+      '따뜻한 일상이 느껴지는 사진이에요.',
+    ],
+    friends: [
+      '안녕하세요! 친구분들과 함께한 사진이네요.',
+      '좋은 친구들과 함께 찍은 사진 같아요.',
+      '즐거운 시간을 보내셨나 봐요!',
+    ],
+  };
+
+  const categoryGreetings = greetings[category] || greetings.daily;
+  let greeting = categoryGreetings[Math.floor(Math.random() * categoryGreetings.length)];
+
+  // AI 분석 정보가 있으면 추가
+  if (autoTags?.description) {
+    greeting += `\n\n${autoTags.description}`;
   }
 
   return greeting;

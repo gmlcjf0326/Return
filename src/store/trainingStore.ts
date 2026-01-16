@@ -379,7 +379,7 @@ export const useTrainingStore = create<TrainingState>()(
       },
     }),
     {
-      name: 'rememory-training',
+      name: 'return-training',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         recentSessions: state.recentSessions,

@@ -21,6 +21,10 @@ interface AnswerInputProps {
   placeholder?: string;
   /** 힌트 텍스트 */
   hint?: string;
+  /** 다중 선택 가능 여부 (객관식) */
+  multiSelect?: boolean;
+  /** 입력 필드 참조 */
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 export default function AnswerInput({
@@ -32,21 +36,27 @@ export default function AnswerInput({
   disabled = false,
   placeholder = '답변을 입력하세요',
   hint,
+  multiSelect = false,
+  inputRef,
 }: AnswerInputProps) {
   const [localValue, setLocalValue] = useState<string>('');
   const [sequenceAnswers, setSequenceAnswers] = useState<string[]>([]);
+  const [multiSelectAnswers, setMultiSelectAnswers] = useState<string[]>([]);
 
   // value 변경 시 로컬 상태 동기화
   useEffect(() => {
     if (typeof value === 'string') {
       setLocalValue(value);
+      setMultiSelectAnswers([]);
     } else if (Array.isArray(value)) {
       setSequenceAnswers(value);
+      setMultiSelectAnswers(value);
     } else if (typeof value === 'number') {
       setLocalValue(String(value));
     } else {
       setLocalValue('');
       setSequenceAnswers([]);
+      setMultiSelectAnswers([]);
     }
   }, [value]);
 
@@ -72,12 +82,24 @@ export default function AnswerInput({
     [onChange]
   );
 
-  // 객관식 선택 핸들러
+  // 객관식 선택 핸들러 (단일 선택)
   const handleOptionSelect = useCallback(
     (option: string) => {
       onChange(option);
     },
     [onChange]
+  );
+
+  // 다중 선택 핸들러
+  const handleMultiSelect = useCallback(
+    (option: string) => {
+      const newSelection = multiSelectAnswers.includes(option)
+        ? multiSelectAnswers.filter((s) => s !== option)
+        : [...multiSelectAnswers, option];
+      setMultiSelectAnswers(newSelection);
+      onChange(newSelection);
+    },
+    [multiSelectAnswers, onChange]
   );
 
   // 순서 배열 핸들러
@@ -109,44 +131,69 @@ export default function AnswerInput({
     [onSubmit, disabled]
   );
 
-  // 객관식 (multiple_choice)
+  // 객관식 (multiple_choice) - 다중 선택 지원
   if (type === 'multiple_choice' && options.length > 0) {
+    const isSelected = (option: string) => {
+      if (multiSelect) {
+        return multiSelectAnswers.includes(option);
+      }
+      return value === option;
+    };
+
+    const hasSelection = multiSelect ? multiSelectAnswers.length > 0 : !!value;
+
     return (
       <div className="space-y-3">
+        {/* 다중 선택 안내 */}
+        {multiSelect && (
+          <div className="flex items-center gap-2 text-sm text-[var(--primary)] bg-[var(--primary-lighter)] px-4 py-2 rounded-lg">
+            <span>📌</span>
+            <span>여러 개를 선택할 수 있습니다. ({multiSelectAnswers.length}개 선택됨)</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-3">
-          {options.map((option, index) => (
-            <button
-              key={index}
-              onClick={() => handleOptionSelect(option)}
-              disabled={disabled}
-              className={`
-                w-full min-h-[64px] px-6 py-4 text-left text-lg
-                rounded-xl border-2 transition-all duration-200
-                ${
-                  value === option
-                    ? 'border-[var(--primary)] bg-[var(--primary-lighter)] text-[var(--primary-deep)] font-medium'
-                    : 'border-[var(--neutral-200)] bg-white hover:border-[var(--primary-light)] hover:bg-[var(--neutral-50)]'
-                }
-                ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-[0.99]'}
-              `}
-            >
-              <span className="flex items-center gap-3">
-                <span
-                  className={`
-                    w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
-                    ${
-                      value === option
-                        ? 'bg-[var(--primary)] text-white'
-                        : 'bg-[var(--neutral-200)] text-[var(--neutral-600)]'
-                    }
-                  `}
-                >
-                  {index + 1}
+          {options.map((option, index) => {
+            const selected = isSelected(option);
+            const selectedIndex = multiSelect ? multiSelectAnswers.indexOf(option) : -1;
+
+            return (
+              <button
+                key={index}
+                onClick={() => multiSelect ? handleMultiSelect(option) : handleOptionSelect(option)}
+                disabled={disabled}
+                className={`
+                  w-full min-h-[64px] px-6 py-4 text-left text-lg
+                  rounded-xl border-2 transition-all duration-200
+                  ${
+                    selected
+                      ? 'border-[var(--primary)] bg-[var(--primary-lighter)] text-[var(--primary-deep)] font-medium'
+                      : 'border-[var(--neutral-200)] bg-white hover:border-[var(--primary-light)] hover:bg-[var(--neutral-50)]'
+                  }
+                  ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-[0.99]'}
+                `}
+              >
+                <span className="flex items-center gap-3">
+                  <span
+                    className={`
+                      w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
+                      ${
+                        selected
+                          ? 'bg-[var(--primary)] text-white'
+                          : 'bg-[var(--neutral-200)] text-[var(--neutral-600)]'
+                      }
+                    `}
+                  >
+                    {multiSelect && selected ? selectedIndex + 1 : index + 1}
+                  </span>
+                  {option}
+                  {multiSelect && selected && (
+                    <span className="ml-auto text-[var(--primary)]">✓</span>
+                  )}
                 </span>
-                {option}
-              </span>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
 
         {hint && (
@@ -155,7 +202,7 @@ export default function AnswerInput({
 
         <Button
           onClick={onSubmit}
-          disabled={disabled || !value}
+          disabled={disabled || !hasSelection}
           size="lg"
           fullWidth
           className="mt-4"
@@ -259,12 +306,14 @@ export default function AnswerInput({
     return (
       <div className="space-y-4">
         <input
+          ref={inputRef}
           type="text"
           value={localValue}
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
+          autoFocus
           className={`
             w-full h-[64px] px-6 text-xl
             border-2 border-[var(--neutral-300)] rounded-xl

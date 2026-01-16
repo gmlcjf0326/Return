@@ -211,7 +211,108 @@ rememory/
 2. [x] TASK-006: 진단 UI 구현 ✅
 3. [ ] TASK-008: 반응 측정 훅 분리 (선택)
 4. [ ] TASK-010: 레이더 차트 추가
-5. [ ] Phase 3 시작: 사진 태깅 + 회상 모듈
+5. [x] Phase 3: Gemini API 연동 및 그림일기 기능 ✅
+
+---
+
+## Phase 3: ReMemory 기능 확장 ✅
+
+### 완료일: 2025-01-16
+
+### TASK-011: Gemini API 연동 ✅
+**완료 시각**: 2025-01-16
+
+**산출물**:
+| 파일 | 작업 | 설명 |
+|------|------|------|
+| `.env` | 수정 | GEMINI_API_KEY 환경변수 활성화 |
+| `.env.example` | 수정 | Gemini 설정 가이드 추가 |
+| `package.json` | 수정 | @google/genai 의존성 추가 |
+| `src/lib/ai/gemini.ts` | 신규 | Gemini API 통합 모듈 |
+| `src/lib/ai/imageGeneration.ts` | 수정 | Gemini 이미지 생성 연동 |
+| `src/lib/ai/llm.ts` | 수정 | Gemini provider 추가 |
+
+**Gemini 모델 설정**:
+- 텍스트: `gemini-1.5-flash-8b` (나노급 경량 모델)
+- 이미지: `gemini-2.0-flash-exp` (이미지 생성 지원)
+
+**주요 기능**:
+- `generateText()`: 텍스트 생성
+- `generateImage()`: 이미지 생성 (Base64 반환)
+- `generateReminiscenceResponse()`: 회상 대화 응답
+- `generateDiarySummary()`: 일기 요약 생성
+- `generateDiaryContent()`: 그림일기 생성 (이미지 + 텍스트)
+
+---
+
+### TASK-012: 월별 더미 사진 확장 ✅
+**완료 시각**: 2025-01-16
+
+**산출물**:
+- `src/data/dummyPhotos.ts` - 360개 더미 사진 (5년 × 월별 다수)
+
+**데이터 구성**:
+| 년도 | 월별 개수 | 총 개수 |
+|------|----------|---------|
+| 2024 | 10개 | 120개 |
+| 2023 | 10개 | 120개 |
+| 2022 | 5개 | 60개 |
+| 2021 | 3개 | 36개 |
+| 2020 | 2개 | 24개 |
+| **합계** | - | **360개** |
+
+**월별 테마**:
+- 1월: 새해, 설날 준비
+- 2월: 설날, 정월대보름
+- 3월: 봄나들이, 졸업식
+- 4월: 벚꽃, 식목일
+- 5월: 어버이날, 가정의달
+- 6월: 초여름, 단오
+- 7월: 여름휴가, 바다
+- 8월: 광복절, 여름 끝
+- 9월: 추석, 가을 시작
+- 10월: 단풍, 한글날
+- 11월: 김장철, 늦가을
+- 12월: 크리스마스, 연말
+
+**새 헬퍼 함수**:
+- `getDummyPhotosByMonth()`: 월별 그룹핑
+- `getDummyPhotosForYearMonth(year, month)`: 특정 년월 조회
+- `getDummyPhotosStats()`: 통계 정보
+
+---
+
+### TASK-013: 원고지 스타일 그림일기 UI ✅
+**완료 시각**: 2025-01-16
+
+**산출물**:
+| 파일 | 유형 | 설명 |
+|------|------|------|
+| `src/components/reminiscence/ManuscriptPaper.tsx` | 신규 | 원고지 그리드 컴포넌트 |
+| `src/components/reminiscence/DiaryPage.tsx` | 신규 | 그림일기 페이지 컴포넌트 |
+| `src/app/globals.css` | 수정 | 원고지 CSS 스타일 추가 |
+| `src/components/reminiscence/index.ts` | 수정 | 새 컴포넌트 export |
+
+**ManuscriptPaper 컴포넌트 기능**:
+- 한 글자씩 셀에 배치
+- 가로/세로 쓰기 지원
+- 글자 수 설정 (charsPerRow, maxRows)
+- 폰트 크기 옵션 (small, normal, large)
+- 원고지 스타일 CSS (5자마다 굵은 선)
+
+**DiaryPage 컴포넌트 기능**:
+- 상단: AI 생성 이미지 (스타일 선택 가능)
+- 하단: 원고지 형태 일기장
+- 이미지 스타일: 수채화, 연필, 크레용, 파스텔
+- 원본/그림 토글 버튼
+- 재생성 버튼
+
+**CSS 스타일**:
+- 손글씨 폰트 (Nanum Pen Script)
+- 원고지 배경 그라데이션
+- 셀 호버 효과
+- 글자 애니메이션
+- 모바일 반응형
 
 ---
 

@@ -1,4 +1,4 @@
-// ReMemory - TypeScript 타입 정의
+// Re:turn - TypeScript 타입 정의
 
 // 세션 관련 타입
 export interface Session {
@@ -47,6 +47,7 @@ export interface EmotionRecord {
   timestamp: number;
   emotion: string;
   confidence: number;
+  questionIndex?: number;
 }
 
 export interface RawResponse {
@@ -64,10 +65,13 @@ export interface AssessmentQuestion {
   difficulty: 1 | 2 | 3;
   question: string;
   options?: string[];
-  correctAnswer?: string | number;
+  correctAnswer?: string | number | string[];
   timeLimit?: number; // 초 단위
   points: number;
   mediaUrl?: string;
+  instruction?: string; // 문항 안내 메시지
+  hint?: string; // 입력 힌트
+  multiSelect?: boolean; // 다중 선택 가능 여부 (객관식)
 }
 
 export type CognitiveCategory =
@@ -81,7 +85,6 @@ export type CognitiveCategory =
 export type QuestionType =
   | 'multiple_choice'
   | 'text_input'
-  | 'voice_input'
   | 'drawing'
   | 'sequence'
   | 'reaction'

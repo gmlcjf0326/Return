@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.supabase.in',
       },
+      // TODO: [REAL_DATA] 더미 이미지용 Picsum Photos - 실제 데이터 전환 시 제거 가능
+      {
+        protocol: 'https',
+        hostname: 'picsum.photos',
+      },
     ],
   },
 
@@ -25,7 +30,7 @@ const nextConfig: NextConfig = {
 
   // 환경 변수 (클라이언트에 노출할 변수)
   env: {
-    NEXT_PUBLIC_APP_NAME: 'ReMemory',
+    NEXT_PUBLIC_APP_NAME: 'Re:turn',
     NEXT_PUBLIC_APP_VERSION: '1.0.0',
   },
 
