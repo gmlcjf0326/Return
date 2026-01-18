@@ -9,7 +9,7 @@
 
 ## 배포 링크
 
-- **라이브 데모**: https://return.vercel.app/
+- **라이브 데모**: https://return-six.vercel.app
 - **GitHub**: https://github.com/gmlcjf0326/Return.git
 
 ## 기술 스택
