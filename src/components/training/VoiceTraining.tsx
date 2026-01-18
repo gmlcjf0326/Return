@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useAudioRecording, formatRecordingDuration, type RecordingResult } from '@/hooks/useAudioRecording';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSpeechRecognition, calculateSimilarity } from '@/hooks/useSpeechRecognition';
 import Button from '@/components/ui/Button';
 
 // 음성 훈련 과제 타입
@@ -13,7 +13,8 @@ interface VoiceExercise {
   targetText?: string;
   hint?: string;
   difficulty: 1 | 2 | 3;
-  maxDuration: number;
+  maxAttempts: number;
+  successThreshold: number; // 성공 기준 유사도 (%)
 }
 
 // 음성 훈련 과제 목록
@@ -26,7 +27,8 @@ const voiceExercises: VoiceExercise[] = [
     targetText: '오늘 날씨가 참 좋습니다.',
     hint: '천천히, 또렷하게 읽어주세요.',
     difficulty: 1,
-    maxDuration: 30,
+    maxAttempts: 3,
+    successThreshold: 70,
   },
   {
     id: 'read-2',
@@ -36,7 +38,8 @@ const voiceExercises: VoiceExercise[] = [
     targetText: '가족과 함께하는 시간은 소중합니다.',
     hint: '천천히, 또렷하게 읽어주세요.',
     difficulty: 1,
-    maxDuration: 30,
+    maxAttempts: 3,
+    successThreshold: 70,
   },
   {
     id: 'repeat-1',
@@ -46,7 +49,8 @@ const voiceExercises: VoiceExercise[] = [
     targetText: '사과, 의자, 시계',
     hint: '세 단어를 순서대로 말해주세요.',
     difficulty: 2,
-    maxDuration: 30,
+    maxAttempts: 3,
+    successThreshold: 60,
   },
   {
     id: 'repeat-2',
@@ -56,7 +60,8 @@ const voiceExercises: VoiceExercise[] = [
     targetText: '바다, 산, 강, 하늘, 꽃',
     hint: '기억나는 단어를 모두 말해주세요.',
     difficulty: 2,
-    maxDuration: 45,
+    maxAttempts: 3,
+    successThreshold: 50,
   },
   {
     id: 'describe-1',
@@ -65,7 +70,8 @@ const voiceExercises: VoiceExercise[] = [
     instruction: '오늘 아침에 무엇을 드셨나요? 자유롭게 말씀해주세요.',
     hint: '드신 음식이나 상황을 편하게 말씀해주세요.',
     difficulty: 3,
-    maxDuration: 60,
+    maxAttempts: 1,
+    successThreshold: 0, // 자유 발화는 유사도 검사 안함
   },
   {
     id: 'free-1',
@@ -74,7 +80,8 @@ const voiceExercises: VoiceExercise[] = [
     instruction: '가장 좋아하는 계절과 그 이유를 말씀해주세요.',
     hint: '생각나는 대로 편하게 말씀해주세요.',
     difficulty: 3,
-    maxDuration: 60,
+    maxAttempts: 1,
+    successThreshold: 0,
   },
 ];
 
@@ -90,98 +97,142 @@ export default function VoiceTraining({
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [completedExercises, setCompletedExercises] = useState<string[]>([]);
   const [totalScore, setTotalScore] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [showResult, setShowResult] = useState(false);
+
+  // 과제별 상태
+  const [currentAttempt, setCurrentAttempt] = useState(1);
+  const [currentSimilarity, setCurrentSimilarity] = useState<number | null>(null);
+  const [attemptStatus, setAttemptStatus] = useState<'idle' | 'listening' | 'success' | 'fail'>('idle');
+  const [displayedText, setDisplayedText] = useState('');
+
+  // 타이머 참조
+  const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 현재 난이도에 맞는 과제 필터링
   const filteredExercises = voiceExercises.filter(e => e.difficulty <= initialDifficulty + 1);
   const currentExercise = filteredExercises[currentExerciseIndex];
 
+  // 음성 인식 훅
   const {
     isSupported,
-    state,
-    duration,
-    recording,
+    isListening,
+    transcript,
+    interimTranscript,
     error,
-    startRecording,
-    stopRecording,
-    clearRecording,
-  } = useAudioRecording({
-    maxDuration: currentExercise?.maxDuration ? currentExercise.maxDuration * 1000 : 60000,
-    onMaxDurationReached: () => {
-      stopRecording();
-    },
+    startListening,
+    stopListening,
+    resetTranscript,
+  } = useSpeechRecognition({
+    lang: 'ko-KR',
+    continuous: false,
+    interimResults: true,
   });
 
-  // 녹음 시작/중지 토글
-  const handleToggleRecording = useCallback(async () => {
-    if (state === 'recording') {
-      await stopRecording();
-    } else {
-      if (recording) {
-        clearRecording();
+  // 타이머 정리
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
       }
-      await startRecording();
-    }
-  }, [state, recording, startRecording, stopRecording, clearRecording]);
-
-  // 다시 녹음
-  const handleRetry = useCallback(() => {
-    clearRecording();
-  }, [clearRecording]);
-
-  // 오디오 재생
-  const handlePlay = useCallback(() => {
-    const audioUrl = recording?.url;
-    if (!audioUrl) return;
-
-    if (isPlaying && audioElement) {
-      audioElement.pause();
-      audioElement.currentTime = 0;
-      setIsPlaying(false);
-      return;
-    }
-
-    const audio = new Audio(audioUrl);
-    audio.onended = () => {
-      setIsPlaying(false);
-      setAudioElement(null);
     };
-    audio.play();
-    setAudioElement(audio);
-    setIsPlaying(true);
-  }, [recording, isPlaying, audioElement]);
+  }, []);
+
+  // 실시간 텍스트 표시 업데이트
+  useEffect(() => {
+    const fullText = transcript + interimTranscript;
+    setDisplayedText(fullText);
+  }, [transcript, interimTranscript]);
+
+  // 인식 완료 시 유사도 계산
+  useEffect(() => {
+    if (!isListening && transcript && attemptStatus === 'listening') {
+      const targetText = currentExercise?.targetText;
+
+      if (targetText) {
+        const similarity = calculateSimilarity(transcript, targetText);
+        setCurrentSimilarity(similarity);
+
+        if (similarity >= currentExercise.successThreshold) {
+          setAttemptStatus('success');
+          // 3초 후 자동으로 다음으로 이동
+          autoAdvanceTimerRef.current = setTimeout(() => {
+            handleNext(similarity);
+          }, 2000);
+        } else if (currentAttempt >= currentExercise.maxAttempts) {
+          setAttemptStatus('fail');
+          // 3초 후 자동으로 다음으로 이동
+          autoAdvanceTimerRef.current = setTimeout(() => {
+            handleNext(similarity);
+          }, 2000);
+        } else {
+          setAttemptStatus('fail');
+        }
+      } else {
+        // 자유 발화는 무조건 성공
+        setAttemptStatus('success');
+        setCurrentSimilarity(100);
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          handleNext(100);
+        }, 2000);
+      }
+    }
+  }, [isListening, transcript, attemptStatus]);
+
+  // 음성 인식 시작
+  const handleStartListening = useCallback(() => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+    }
+    resetTranscript();
+    setDisplayedText('');
+    setCurrentSimilarity(null);
+    setAttemptStatus('listening');
+    startListening();
+  }, [resetTranscript, startListening]);
+
+  // 음성 인식 중지
+  const handleStopListening = useCallback(() => {
+    stopListening();
+  }, [stopListening]);
+
+  // 다시 시도
+  const handleRetry = useCallback(() => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+    }
+    setCurrentAttempt(prev => prev + 1);
+    resetTranscript();
+    setDisplayedText('');
+    setCurrentSimilarity(null);
+    setAttemptStatus('idle');
+  }, [resetTranscript]);
 
   // 다음 과제로 이동
-  const handleNext = useCallback(() => {
+  const handleNext = useCallback((score: number = currentSimilarity || 0) => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+    }
+
     if (!currentExercise) return;
 
-    // 점수 계산 (시뮬레이션 - 실제로는 AI 분석 필요)
-    const exerciseScore = 70 + Math.floor(Math.random() * 30);
-    setTotalScore(prev => prev + exerciseScore);
+    setTotalScore(prev => prev + score);
     setCompletedExercises(prev => [...prev, currentExercise.id]);
 
     if (currentExerciseIndex < filteredExercises.length - 1) {
       setCurrentExerciseIndex(prev => prev + 1);
-      clearRecording();
+      setCurrentAttempt(1);
+      setCurrentSimilarity(null);
+      setAttemptStatus('idle');
+      resetTranscript();
+      setDisplayedText('');
     } else {
       setShowResult(true);
       if (onComplete) {
-        const avgScore = Math.round((totalScore + exerciseScore) / (completedExercises.length + 1));
+        const avgScore = Math.round((totalScore + score) / (completedExercises.length + 1));
         onComplete(avgScore, completedExercises.length + 1);
       }
     }
-  }, [currentExercise, currentExerciseIndex, filteredExercises.length, totalScore, completedExercises, clearRecording, onComplete]);
-
-  // 컴포넌트 언마운트 시 오디오 정리
-  useEffect(() => {
-    return () => {
-      if (audioElement) {
-        audioElement.pause();
-      }
-    };
-  }, [audioElement]);
+  }, [currentExercise, currentExerciseIndex, filteredExercises.length, totalScore, completedExercises, currentSimilarity, resetTranscript, onComplete]);
 
   // 지원하지 않는 브라우저
   if (!isSupported) {
@@ -189,10 +240,10 @@ export default function VoiceTraining({
       <div className="p-6 bg-red-50 rounded-xl border-2 border-red-200 text-center">
         <span className="text-4xl mb-2 block">🚫</span>
         <p className="text-red-700 font-medium">
-          이 브라우저는 오디오 녹음을 지원하지 않습니다.
+          이 브라우저는 음성 인식을 지원하지 않습니다.
         </p>
         <p className="text-red-600 text-sm mt-1">
-          Chrome, Edge, Safari 등 최신 브라우저를 사용해주세요.
+          Chrome 또는 Edge 브라우저를 사용해주세요.
         </p>
       </div>
     );
@@ -222,7 +273,11 @@ export default function VoiceTraining({
             setCompletedExercises([]);
             setTotalScore(0);
             setShowResult(false);
-            clearRecording();
+            setCurrentAttempt(1);
+            setCurrentSimilarity(null);
+            setAttemptStatus('idle');
+            resetTranscript();
+            setDisplayedText('');
           }}
           fullWidth
           size="lg"
@@ -237,7 +292,13 @@ export default function VoiceTraining({
     return null;
   }
 
-  const hasRecording = recording;
+  // 유사도에 따른 색상
+  const getSimilarityColor = (similarity: number | null) => {
+    if (similarity === null) return 'text-[var(--neutral-500)]';
+    if (similarity >= 70) return 'text-green-600';
+    if (similarity >= 50) return 'text-yellow-600';
+    return 'text-red-600';
+  };
 
   return (
     <div className="space-y-6">
@@ -271,7 +332,7 @@ export default function VoiceTraining({
           {currentExercise.instruction}
         </h3>
         {currentExercise.targetText && (
-          <p className="text-2xl text-[var(--primary-deep)] font-medium p-4 bg-blue-50 rounded-xl">
+          <p className="text-2xl text-[var(--primary-deep)] font-medium p-4 bg-blue-50 rounded-xl break-words">
             "{currentExercise.targetText}"
           </p>
         )}
@@ -284,94 +345,124 @@ export default function VoiceTraining({
         </div>
       )}
 
-      {/* 녹음 UI */}
+      {/* 실시간 인식 UI */}
       <div className="p-6 bg-[var(--neutral-50)] rounded-xl border-2 border-[var(--neutral-200)]">
+        {/* 상태 표시 */}
         <div className="text-center mb-6">
           <div
             className={`
               inline-flex items-center justify-center w-24 h-24 rounded-full mb-4
               transition-all duration-300
-              ${state === 'recording' ? 'bg-red-100 animate-pulse' : hasRecording ? 'bg-green-100' : 'bg-[var(--neutral-200)]'}
+              ${isListening
+                ? 'bg-red-100 animate-pulse'
+                : attemptStatus === 'success'
+                  ? 'bg-green-100'
+                  : attemptStatus === 'fail'
+                    ? 'bg-yellow-100'
+                    : 'bg-[var(--neutral-200)]'}
             `}
           >
-            {state === 'recording' ? (
+            {isListening ? (
               <span className="text-5xl">🎙️</span>
-            ) : hasRecording ? (
+            ) : attemptStatus === 'success' ? (
               <span className="text-5xl">✅</span>
+            ) : attemptStatus === 'fail' ? (
+              <span className="text-5xl">🔄</span>
             ) : (
               <span className="text-5xl">🎤</span>
             )}
           </div>
 
-          <div className="text-2xl font-mono font-bold text-[var(--neutral-700)]">
-            {formatRecordingDuration(state === 'recording' ? duration : recording?.duration || 0)}
-            {state === 'recording' && (
-              <span className="text-red-500 ml-2 animate-pulse">REC</span>
-            )}
-          </div>
+          {/* 시도 횟수 */}
+          {currentExercise.maxAttempts > 1 && (
+            <div className="text-sm text-[var(--neutral-500)] mb-2">
+              시도: {currentAttempt} / {currentExercise.maxAttempts}
+            </div>
+          )}
 
-          <div className="text-sm text-[var(--neutral-500)] mt-1">
-            최대 {currentExercise.maxDuration}초
+          {/* 상태 메시지 */}
+          <div className="text-lg font-medium text-[var(--neutral-700)]">
+            {isListening ? (
+              <span className="text-red-500 animate-pulse">듣고 있어요...</span>
+            ) : attemptStatus === 'success' ? (
+              <span className="text-green-600">성공!</span>
+            ) : attemptStatus === 'fail' && currentAttempt >= currentExercise.maxAttempts ? (
+              <span className="text-yellow-600">다음으로 넘어갑니다</span>
+            ) : attemptStatus === 'fail' ? (
+              <span className="text-yellow-600">다시 시도해보세요</span>
+            ) : (
+              <span>아래 버튼을 눌러 시작하세요</span>
+            )}
           </div>
         </div>
 
-        {state === 'recording' && (
-          <div className="h-2 bg-[var(--neutral-200)] rounded-full overflow-hidden mb-4">
-            <div
-              className="h-full bg-red-500 transition-all duration-100"
-              style={{ width: `${Math.min((duration / (currentExercise.maxDuration * 1000)) * 100, 100)}%` }}
-            />
+        {/* 실시간 타이핑 영역 */}
+        <div className="min-h-[80px] p-4 bg-white rounded-xl border-2 border-[var(--neutral-200)] mb-4">
+          <p className="text-lg text-[var(--neutral-700)] break-words">
+            {displayedText || (
+              <span className="text-[var(--neutral-400)] italic">
+                여기에 음성이 텍스트로 표시됩니다...
+              </span>
+            )}
+            {isListening && <span className="animate-pulse">|</span>}
+          </p>
+        </div>
+
+        {/* 유사도 표시 */}
+        {currentSimilarity !== null && currentExercise.targetText && (
+          <div className={`text-center mb-4 text-xl font-bold ${getSimilarityColor(currentSimilarity)}`}>
+            일치율: {currentSimilarity}%
+            {currentSimilarity >= currentExercise.successThreshold ? (
+              <span className="ml-2">🎉</span>
+            ) : null}
           </div>
         )}
 
+        {/* 버튼 영역 */}
         <div className="flex justify-center gap-3">
-          {!hasRecording || state === 'recording' ? (
-            <button
-              onClick={handleToggleRecording}
-              className={`
-                flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg
-                transition-all duration-200 active:scale-95
-                ${state === 'recording'
-                  ? 'bg-red-500 text-white hover:bg-red-600'
-                  : 'bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]'
-                }
-              `}
-            >
-              {state === 'recording' ? (
-                <>
-                  <span className="w-4 h-4 bg-white rounded-sm"></span>
-                  녹음 중지
-                </>
-              ) : (
-                <>
-                  <span className="text-xl">🎤</span>
-                  녹음 시작
-                </>
-              )}
-            </button>
-          ) : (
+          {attemptStatus === 'idle' || (attemptStatus === 'fail' && currentAttempt < currentExercise.maxAttempts) ? (
             <>
+              {attemptStatus === 'fail' && (
+                <button
+                  onClick={handleRetry}
+                  className="flex items-center gap-2 px-6 py-4 rounded-xl font-medium text-lg
+                    border-2 border-[var(--neutral-300)] text-[var(--neutral-600)]
+                    hover:bg-[var(--neutral-100)] transition-all duration-200 active:scale-95"
+                >
+                  <span className="text-xl">🔄</span>
+                  다시 시도
+                </button>
+              )}
               <button
-                onClick={handlePlay}
-                className="flex items-center gap-2 px-6 py-4 rounded-xl font-medium text-lg
-                  border-2 border-[var(--primary)] text-[var(--primary)]
-                  hover:bg-[var(--primary-lighter)] transition-all duration-200 active:scale-95"
+                onClick={handleStartListening}
+                className="flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg
+                  bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]
+                  transition-all duration-200 active:scale-95"
               >
-                <span className="text-xl">{isPlaying ? '⏸️' : '▶️'}</span>
-                {isPlaying ? '일시정지' : '재생'}
-              </button>
-
-              <button
-                onClick={handleRetry}
-                className="flex items-center gap-2 px-6 py-4 rounded-xl font-medium text-lg
-                  border-2 border-[var(--neutral-300)] text-[var(--neutral-600)]
-                  hover:bg-[var(--neutral-100)] transition-all duration-200 active:scale-95"
-              >
-                <span className="text-xl">🔄</span>
-                다시 녹음
+                <span className="text-xl">🎤</span>
+                {attemptStatus === 'idle' ? '시작하기' : '다시 말하기'}
               </button>
             </>
-          )}
+          ) : isListening ? (
+            <button
+              onClick={handleStopListening}
+              className="flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg
+                bg-red-500 text-white hover:bg-red-600
+                transition-all duration-200 active:scale-95"
+            >
+              <span className="w-4 h-4 bg-white rounded-sm"></span>
+              인식 중지
+            </button>
+          ) : (attemptStatus === 'success' || (attemptStatus === 'fail' && currentAttempt >= currentExercise.maxAttempts)) ? (
+            <button
+              onClick={() => handleNext()}
+              className="flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg
+                bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]
+                transition-all duration-200 active:scale-95"
+            >
+              {currentExerciseIndex < filteredExercises.length - 1 ? '다음 과제' : '완료'}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -379,16 +470,6 @@ export default function VoiceTraining({
       {currentExercise.hint && (
         <p className="text-sm text-[var(--neutral-500)] text-center">{currentExercise.hint}</p>
       )}
-
-      {/* 다음 버튼 */}
-      <Button
-        onClick={handleNext}
-        disabled={!hasRecording || state === 'recording'}
-        size="lg"
-        fullWidth
-      >
-        {currentExerciseIndex < filteredExercises.length - 1 ? '다음 과제' : '훈련 완료'}
-      </Button>
     </div>
   );
 }

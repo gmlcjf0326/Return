@@ -35,7 +35,7 @@ export interface DemoPlayerProps {
 export interface DemoControlsProps {
   isPlaying: boolean;
   onPlayPause: () => void;
-  onSkip: () => void;
+  onSkip?: () => void;
   onClose: () => void;
 }
 

@@ -1,0 +1,81 @@
+# 📊 프로젝트 진행 현황
+
+> **프로젝트**: {{PROJECT_NAME}}
+> **최종 업데이트**: {{LAST_UPDATE}}
+
+---
+
+## 전체 진행률
+
+```
+{{PROGRESS_BAR}} {{PROGRESS_PERCENT}}% ({{COMPLETED}}/{{TOTAL}})
+```
+
+---
+
+## 🚀 현재 작업 중
+
+- **{{CURRENT_TASK_ID}}**: {{CURRENT_TASK_NAME}}
+  - 현재: {{CURRENT_SUBTASK}}
+  - 📁 `docs/TASKS/{{CURRENT_TASK_ID}}/`
+
+---
+
+## Phase 1: {{PHASE_1_NAME}}
+
+- [ ] **TASK-001**: {{TASK_001_NAME}} ⏳
+  - [ ] 1-1: {{SUBTASK_1_1}}
+  - [ ] 1-2: {{SUBTASK_1_2}}
+  - [ ] 1-3: {{SUBTASK_1_3}}
+  - 📁 `docs/TASKS/TASK-001/`
+
+- [ ] **TASK-002**: {{TASK_002_NAME}} ⏳
+  - [ ] 2-1: {{SUBTASK_2_1}}
+  - [ ] 2-2: {{SUBTASK_2_2}}
+  - 📁 `docs/TASKS/TASK-002/`
+
+- [ ] **TASK-003**: {{TASK_003_NAME}} ⏳
+  - [ ] 3-1: {{SUBTASK_3_1}}
+  - [ ] 3-2: {{SUBTASK_3_2}}
+  - 📁 `docs/TASKS/TASK-003/`
+
+---
+
+## Phase 2: {{PHASE_2_NAME}}
+
+- [ ] **TASK-004**: {{TASK_004_NAME}} ⏳
+- [ ] **TASK-005**: {{TASK_005_NAME}} ⏳
+- [ ] **TASK-006**: {{TASK_006_NAME}} ⏳
+
+---
+
+## 상태 범례
+
+| 아이콘 | 의미 |
+|--------|------|
+| ⏳ | 대기 중 |
+| 🚀 | 진행 중 |
+| 🔍 | 리뷰 필요 |
+| 🔥 | 블로커 |
+| ✅ | 완료 |
+
+---
+
+## 📝 최근 변경
+
+| 날짜 | 태스크 | 변경 내용 |
+|------|--------|----------|
+| {{DATE}} | {{TASK}} | {{CHANGE}} |
+
+---
+
+## 🔥 블로커 (있는 경우)
+
+> 현재 블로커 없음
+
+<!--
+블로커 발생 시:
+| 태스크 | 블로커 내용 | 필요 조치 |
+|--------|------------|----------|
+| TASK-XXX | 설명 | 조치 |
+-->

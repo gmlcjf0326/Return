@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { initTensorFlow } from '@/lib/ai/tensorflow';
+import * as poseDetection from '@tensorflow-models/pose-detection';
+
+// 키포인트 타입
+export interface Keypoint {
+  x: number;
+  y: number;
+  score?: number;
+  name?: string;
+}
 
 // 자세 타입
 export type PostureType =
@@ -35,6 +44,7 @@ interface UsePoseDetectionOptions {
   detectionInterval?: number;
   tiltThreshold?: number; // 기울기 임계값 (도)
   onPostureChange?: (posture: PostureType, angle: number) => void;
+  onKeypointsDetected?: (keypoints: Keypoint[]) => void;
 }
 
 // 훅 반환 타입
@@ -45,19 +55,44 @@ interface UsePoseDetectionReturn {
   currentTiltAngle: number;
   postureTimeline: PostureRecord[];
   postureStats: PostureStats;
+  keypoints: Keypoint[];
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
   startDetection: () => Promise<boolean>;
   stopDetection: () => void;
   clearTimeline: () => void;
   recordPostureForQuestion: (questionIndex: number) => void;
+  drawKeypoints: () => void;
 }
+
+// MoveNet 키포인트 인덱스
+const KEYPOINT_NAMES = [
+  'nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear',
+  'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
+  'left_wrist', 'right_wrist', 'left_hip', 'right_hip',
+  'left_knee', 'right_knee', 'left_ankle', 'right_ankle'
+];
+
+// 스켈레톤 연결 정의 (키포인트 인덱스 쌍)
+const SKELETON_CONNECTIONS: [number, number][] = [
+  [0, 1], [0, 2],           // nose -> eyes
+  [1, 3], [2, 4],           // eyes -> ears
+  [5, 6],                   // shoulders
+  [5, 7], [7, 9],           // left arm
+  [6, 8], [8, 10],          // right arm
+  [5, 11], [6, 12],         // torso
+  [11, 12],                 // hips
+  [11, 13], [13, 15],       // left leg
+  [12, 14], [14, 16],       // right leg
+];
 
 export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePoseDetectionReturn {
   const {
     enabled = true,
-    detectionInterval = 500,
+    detectionInterval = 100, // 더 빠른 감지를 위해 100ms로 변경
     tiltThreshold = 15,
     onPostureChange,
+    onKeypointsDetected,
   } = options;
 
   const [isLoading, setIsLoading] = useState(false);
@@ -65,10 +100,13 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
   const [currentPosture, setCurrentPosture] = useState<PostureType>('unknown');
   const [currentTiltAngle, setCurrentTiltAngle] = useState(0);
   const [postureTimeline, setPostureTimeline] = useState<PostureRecord[]>([]);
+  const [keypoints, setKeypoints] = useState<Keypoint[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const detectorRef = useRef<poseDetection.PoseDetector | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   const currentQuestionIndexRef = useRef<number>(0);
 
   // 자세 통계 계산
@@ -86,8 +124,15 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
         audio: false,
       });
 
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const settings = videoTrack.getSettings();
+        console.log('[PoseDetection] Video track settings:', settings);
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.style.filter = 'none';
         await videoRef.current.play();
       }
 
@@ -110,24 +155,104 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     }
   }, []);
 
-  // 자세 분석 (시뮬레이션)
-  // 실제 구현에서는 pose-detection 모델로 어깨/머리 위치 분석
-  const analyzePosture = useCallback((): { posture: PostureType; angle: number } => {
-    // 랜덤 기울기 시뮬레이션 (-30 ~ +30도)
-    // 대부분 바른 자세, 가끔 기울어짐
-    const isUpright = Math.random() > 0.2; // 80% 확률로 바른 자세
+  // MoveNet 모델 초기화
+  const initDetector = useCallback(async (): Promise<boolean> => {
+    try {
+      console.log('[PoseDetection] Initializing MoveNet detector...');
 
-    if (isUpright) {
-      const angle = (Math.random() - 0.5) * 10; // -5 ~ +5도
-      return { posture: 'upright', angle };
+      const detector = await poseDetection.createDetector(
+        poseDetection.SupportedModels.MoveNet,
+        {
+          modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+          enableSmoothing: true,
+        }
+      );
+
+      detectorRef.current = detector;
+      console.log('[PoseDetection] MoveNet detector initialized');
+      return true;
+    } catch (error) {
+      console.error('[PoseDetection] Failed to initialize detector:', error);
+      return false;
+    }
+  }, []);
+
+  // 키포인트를 캔버스에 그리기
+  const drawKeypoints = useCallback(() => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video || keypoints.length === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // 캔버스 크기를 비디오에 맞춤
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+
+    // 캔버스 초기화
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 미러링을 위한 변환
+    ctx.save();
+    ctx.scale(-1, 1);
+    ctx.translate(-canvas.width, 0);
+
+    // 스켈레톤 그리기 (선)
+    ctx.strokeStyle = '#00FF00';
+    ctx.lineWidth = 3;
+
+    for (const [startIdx, endIdx] of SKELETON_CONNECTIONS) {
+      const start = keypoints[startIdx];
+      const end = keypoints[endIdx];
+
+      if (start && end && (start.score || 0) > 0.3 && (end.score || 0) > 0.3) {
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+      }
     }
 
-    // 기울어진 경우
-    const angle = (Math.random() - 0.5) * 40; // -20 ~ +20도
+    // 키포인트 그리기 (원)
+    for (const kp of keypoints) {
+      if ((kp.score || 0) > 0.3) {
+        // 외곽선
+        ctx.beginPath();
+        ctx.arc(kp.x, kp.y, 8, 0, 2 * Math.PI);
+        ctx.fillStyle = '#00FF00';
+        ctx.fill();
+
+        // 내부
+        ctx.beginPath();
+        ctx.arc(kp.x, kp.y, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }, [keypoints]);
+
+  // 자세 분석 (실제 키포인트 기반)
+  const analyzePostureFromKeypoints = useCallback((kps: Keypoint[]): { posture: PostureType; angle: number } => {
+    // 어깨 키포인트 찾기
+    const leftShoulder = kps[5];
+    const rightShoulder = kps[6];
+
+    if (!leftShoulder || !rightShoulder ||
+        (leftShoulder.score || 0) < 0.3 || (rightShoulder.score || 0) < 0.3) {
+      return { posture: 'unknown', angle: 0 };
+    }
+
+    // 어깨 기울기 계산
+    const deltaY = rightShoulder.y - leftShoulder.y;
+    const deltaX = rightShoulder.x - leftShoulder.x;
+    const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
 
     let posture: PostureType;
     if (Math.abs(angle) > tiltThreshold) {
-      posture = angle < 0 ? 'leaning_left' : 'leaning_right';
+      posture = angle > 0 ? 'leaning_right' : 'leaning_left';
     } else {
       posture = 'upright';
     }
@@ -135,35 +260,70 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     return { posture, angle };
   }, [tiltThreshold]);
 
-  // 자세 감지 루프
-  const detectPosture = useCallback(() => {
-    if (!isActive || !videoRef.current) return;
-
-    const { posture, angle } = analyzePosture();
-
-    setCurrentPosture(posture);
-    setCurrentTiltAngle(angle);
-
-    // 타임라인에 기록
-    const record: PostureRecord = {
-      timestamp: Date.now(),
-      posture,
-      tiltAngle: angle,
-      questionIndex: currentQuestionIndexRef.current,
-    };
-
-    setPostureTimeline(prev => [...prev, record]);
-
-    // 콜백 호출
-    if (onPostureChange) {
-      onPostureChange(posture, angle);
+  // 실시간 포즈 감지 루프
+  const detectPose = useCallback(async () => {
+    if (!isActive || !videoRef.current || !detectorRef.current) {
+      return;
     }
-  }, [isActive, analyzePosture, onPostureChange]);
+
+    try {
+      const poses = await detectorRef.current.estimatePoses(videoRef.current);
+
+      if (poses.length > 0 && poses[0].keypoints) {
+        const detectedKeypoints = poses[0].keypoints.map((kp, idx) => ({
+          x: kp.x,
+          y: kp.y,
+          score: kp.score,
+          name: KEYPOINT_NAMES[idx],
+        }));
+
+        setKeypoints(detectedKeypoints);
+
+        // 콜백 호출
+        if (onKeypointsDetected) {
+          onKeypointsDetected(detectedKeypoints);
+        }
+
+        // 자세 분석
+        const { posture, angle } = analyzePostureFromKeypoints(detectedKeypoints);
+
+        if (posture !== 'unknown') {
+          setCurrentPosture(posture);
+          setCurrentTiltAngle(angle);
+
+          // 타임라인에 기록
+          const record: PostureRecord = {
+            timestamp: Date.now(),
+            posture,
+            tiltAngle: angle,
+            questionIndex: currentQuestionIndexRef.current,
+          };
+          setPostureTimeline(prev => [...prev.slice(-100), record]); // 최근 100개만 유지
+
+          if (onPostureChange) {
+            onPostureChange(posture, angle);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[PoseDetection] Detection error:', error);
+    }
+
+    // 다음 프레임 예약
+    if (isActive) {
+      animationFrameRef.current = requestAnimationFrame(detectPose);
+    }
+  }, [isActive, analyzePostureFromKeypoints, onKeypointsDetected, onPostureChange]);
+
+  // 키포인트 변경 시 캔버스에 그리기
+  useEffect(() => {
+    if (keypoints.length > 0) {
+      drawKeypoints();
+    }
+  }, [keypoints, drawKeypoints]);
 
   // 감지 시작
   const startDetection = useCallback(async (): Promise<boolean> => {
-    if (!enabled) return false;
-
     setIsLoading(true);
 
     try {
@@ -177,11 +337,30 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
         return false;
       }
 
+      // 비디오가 로드될 때까지 대기
+      await new Promise<void>((resolve) => {
+        if (videoRef.current) {
+          if (videoRef.current.readyState >= 2) {
+            resolve();
+          } else {
+            videoRef.current.onloadeddata = () => resolve();
+          }
+        } else {
+          resolve();
+        }
+      });
+
+      // MoveNet 초기화
+      const detectorInitialized = await initDetector();
+      if (!detectorInitialized) {
+        console.warn('[PoseDetection] Using simulation mode');
+      }
+
       setIsActive(true);
       setIsLoading(false);
 
-      // 감지 인터벌 시작
-      detectionIntervalRef.current = setInterval(detectPosture, detectionInterval);
+      // 감지 루프 시작
+      animationFrameRef.current = requestAnimationFrame(detectPose);
 
       return true;
     } catch (error) {
@@ -189,18 +368,24 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
       setIsLoading(false);
       return false;
     }
-  }, [enabled, startWebcam, detectPosture, detectionInterval]);
+  }, [startWebcam, initDetector, detectPose]);
 
   // 감지 중지
   const stopDetection = useCallback(() => {
     setIsActive(false);
 
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    if (detectorRef.current) {
+      detectorRef.current.dispose();
+      detectorRef.current = null;
     }
 
     stopWebcam();
+    setKeypoints([]);
   }, [stopWebcam]);
 
   // 타임라인 초기화
@@ -216,23 +401,28 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
   // 컴포넌트 언마운트 시 정리
   useEffect(() => {
     return () => {
-      stopDetection();
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (detectorRef.current) {
+        detectorRef.current.dispose();
+      }
+      stopWebcam();
     };
-  }, [stopDetection]);
+  }, [stopWebcam]);
 
-  // 감지 루프 업데이트
+  // isActive 변경 시 감지 루프 관리
   useEffect(() => {
-    if (isActive && !detectionIntervalRef.current) {
-      detectionIntervalRef.current = setInterval(detectPosture, detectionInterval);
+    if (isActive && !animationFrameRef.current) {
+      animationFrameRef.current = requestAnimationFrame(detectPose);
     }
-
     return () => {
-      if (detectionIntervalRef.current) {
-        clearInterval(detectionIntervalRef.current);
-        detectionIntervalRef.current = null;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
     };
-  }, [isActive, detectPosture, detectionInterval]);
+  }, [isActive, detectPose]);
 
   return {
     isLoading,
@@ -241,11 +431,14 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     currentTiltAngle,
     postureTimeline,
     postureStats,
+    keypoints,
     videoRef,
+    canvasRef,
     startDetection,
     stopDetection,
     clearTimeline,
     recordPostureForQuestion,
+    drawKeypoints,
   };
 }
 
@@ -268,7 +461,6 @@ function calculatePostureStats(timeline: PostureRecord[]): PostureStats {
   let rightTilt = 0;
   let slouching = 0;
 
-  // 기울어짐 구간 계산
   let tiltSequences: number[] = [];
   let currentTiltStart: number | null = null;
 
@@ -277,7 +469,6 @@ function calculatePostureStats(timeline: PostureRecord[]): PostureStats {
       case 'upright':
         upright++;
         if (currentTiltStart !== null) {
-          // 기울어짐 구간 종료
           tiltSequences.push(record.timestamp - currentTiltStart);
           currentTiltStart = null;
         }
@@ -299,7 +490,6 @@ function calculatePostureStats(timeline: PostureRecord[]): PostureStats {
         break;
     }
 
-    // 마지막 기록에서 기울어짐 중이면 종료
     if (index === timeline.length - 1 && currentTiltStart !== null) {
       tiltSequences.push(record.timestamp - currentTiltStart);
     }
@@ -350,22 +540,19 @@ export const postureColors: Record<PostureType, string> = {
 export interface TargetPose {
   name: string;
   keypoints: Record<string, { x: number; y: number; minConfidence?: number }>;
-  tolerance: number; // 허용 오차 (픽셀)
+  tolerance: number;
 }
 
 // 자세 비교 결과
 export interface PoseComparisonResult {
   isMatching: boolean;
-  matchScore: number; // 0-100
+  matchScore: number;
   matchedPoints: string[];
   unmatchedPoints: string[];
 }
 
 /**
  * 목표 자세와 현재 자세 비교
- * @param target 목표 자세 정의
- * @param currentKeypoints 현재 감지된 키포인트
- * @returns 비교 결과
  */
 export function comparePose(
   target: TargetPose,
@@ -384,14 +571,12 @@ export function comparePose(
       continue;
     }
 
-    // 신뢰도 확인
     const minConfidence = targetPoint.minConfidence || 0.5;
     if (currentPoint.confidence < minConfidence) {
       unmatchedPoints.push(pointName);
       continue;
     }
 
-    // 위치 비교 (허용 오차 내)
     const distance = Math.sqrt(
       Math.pow(currentPoint.x - targetPoint.x, 2) +
       Math.pow(currentPoint.y - targetPoint.y, 2)
@@ -409,7 +594,7 @@ export function comparePose(
     : 0;
 
   return {
-    isMatching: matchScore >= 70, // 70% 이상 일치하면 성공
+    isMatching: matchScore >= 70,
     matchScore,
     matchedPoints,
     unmatchedPoints,
@@ -418,25 +603,18 @@ export function comparePose(
 
 /**
  * 간단한 동작 감지 (시뮬레이션용)
- * 실제 구현에서는 TensorFlow.js pose-detection 사용
  */
 export function detectSimpleMovement(
   movementType: string,
   _videoElement: HTMLVideoElement | null
 ): { detected: boolean; confidence: number } {
-  // 시뮬레이션: 80% 확률로 동작 감지 성공
   const detected = Math.random() > 0.2;
   const confidence = detected ? 0.7 + Math.random() * 0.3 : 0.2 + Math.random() * 0.3;
-
   return { detected, confidence };
 }
 
 /**
  * 동작 일치도 점수 계산
- * @param targetMovement 목표 동작 타입
- * @param detectionHistory 감지 이력
- * @param duration 수행 시간 (ms)
- * @returns 점수 (0-100)
  */
 export function calculateMovementScore(
   targetMovement: string,
@@ -445,13 +623,8 @@ export function calculateMovementScore(
 ): number {
   if (detectionHistory.length === 0) return 0;
 
-  // 감지 성공률
   const successRate = detectionHistory.filter(d => d.detected).length / detectionHistory.length;
-
-  // 평균 신뢰도
   const avgConfidence = detectionHistory.reduce((sum, d) => sum + d.confidence, 0) / detectionHistory.length;
-
-  // 기본 점수 = 성공률 * 80 + 신뢰도 * 20
   const baseScore = successRate * 80 + avgConfidence * 20;
 
   return Math.round(Math.min(baseScore, 100));

@@ -45,7 +45,7 @@ export default function Home() {
         {/* Main Actions */}
         <section className="mb-8">
           <h3 className="text-xl font-bold text-[var(--neutral-800)] mb-4">주요 기능</h3>
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid lg:grid-cols-2 gap-8">
             {/* Cognitive Assessment Card */}
             <Card className="hover:shadow-lg transition-shadow relative">
               <CardPlayButton onClick={() => setAutoplayDemo('assessment')} variant="primary" />
@@ -78,7 +78,7 @@ export default function Home() {
                 <div className="flex gap-3">
                   <Button
                     variant="primary"
-                    size="lg"
+                    size="xl"
                     className="flex-1"
                     onClick={() => router.push('/assessment')}
                   >
@@ -89,7 +89,7 @@ export default function Home() {
                   </Button>
                   <Button
                     variant="outline"
-                    size="lg"
+                    size="xl"
                     onClick={() => setActiveDemo('assessment')}
                   >
                     체험하기
@@ -124,27 +124,18 @@ export default function Home() {
                   <StatusBadge status="normal" size="sm">계산력 퍼즐</StatusBadge>
                   <StatusBadge status="normal" size="sm">회상 대화</StatusBadge>
                 </div>
-                <div className="flex gap-3">
-                  <Button
-                    variant="secondary"
-                    size="lg"
-                    className="flex-1"
-                    onClick={() => router.push('/training')}
-                  >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    훈련 시작하기
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={() => setActiveDemo('memory')}
-                  >
-                    체험하기
-                  </Button>
-                </div>
+                <Button
+                  variant="secondary"
+                  size="xl"
+                  fullWidth
+                  onClick={() => router.push('/training')}
+                >
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  훈련 시작하기
+                </Button>
               </CardContent>
             </Card>
           </div>

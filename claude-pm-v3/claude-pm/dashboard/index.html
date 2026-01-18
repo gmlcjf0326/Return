@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude PM Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e0e0e0;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding: 16px 24px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+    }
+
+    .header h1 {
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header h1 span { font-size: 28px; }
+
+    .progress-bar-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .progress-bar {
+      width: 200px;
+      height: 12px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00d9ff, #00ff88);
+      transition: width 0.5s ease;
+    }
+
+    .progress-text {
+      font-size: 18px;
+      font-weight: 600;
+      color: #00ff88;
+    }
+
+    /* Main Grid */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 20px;
+    }
+
+    /* Kanban Board */
+    .kanban-board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .kanban-column {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 400px;
+    }
+
+    .column-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .column-title {
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .column-count {
+      background: rgba(255,255,255,0.1);
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    /* Task Cards */
+    .task-card {
+      background: rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      border-left: 3px solid #666;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .task-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .task-card.backend { border-left-color: #3b82f6; }
+    .task-card.frontend { border-left-color: #10b981; }
+    .task-card.database { border-left-color: #f59e0b; }
+    .task-card.infra { border-left-color: #8b5cf6; }
+    .task-card.test { border-left-color: #ef4444; }
+
+    .task-id {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+
+    .task-title {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+
+    .task-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #888;
+    }
+
+    .task-category {
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.1);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sidebar-card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .sidebar-card h3 {
+      font-size: 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Current Task */
+    .current-task {
+      border: 1px solid #00ff88;
+    }
+
+    .current-task-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #00ff88;
+      margin-bottom: 8px;
+    }
+
+    .subtask-list {
+      list-style: none;
+    }
+
+    .subtask-item {
+      padding: 6px 0;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .subtask-item.completed {
+      color: #888;
+      text-decoration: line-through;
+    }
+
+    .subtask-item.current {
+      color: #00d9ff;
+      font-weight: 500;
+    }
+
+    /* File Changes */
+    .file-list {
+      list-style: none;
+    }
+
+    .file-item {
+      padding: 8px;
+      margin-bottom: 8px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    .file-item .path { color: #00d9ff; }
+    .file-item .status { 
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+    .file-item .status.modified { background: #f59e0b; color: #000; }
+    .file-item .status.created { background: #10b981; color: #000; }
+    .file-item .status.deleted { background: #ef4444; color: #fff; }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: transform 0.2s;
+    }
+
+    .btn:hover { transform: scale(1.02); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #00d9ff, #00ff88);
+      color: #000;
+      font-weight: 600;
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+
+    /* Drop Zone */
+    .drop-zone {
+      border: 2px dashed rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      margin-bottom: 20px;
+      transition: border-color 0.3s;
+    }
+
+    .drop-zone.active {
+      border-color: #00ff88;
+      background: rgba(0,255,136,0.1);
+    }
+
+    .drop-zone p {
+      color: #888;
+      margin-bottom: 12px;
+    }
+
+    /* Time */
+    .last-update {
+      font-size: 11px;
+      color: #666;
+      text-align: right;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Drop Zone -->
+    <div class="drop-zone" id="dropZone">
+      <p>📁 PROGRESS.md 파일을 여기에 드래그하거나</p>
+      <input type="file" id="fileInput" accept=".md" style="display:none">
+      <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+        파일 선택
+      </button>
+    </div>
+
+    <!-- Header -->
+    <div class="header">
+      <h1><span>📊</span> Claude PM Dashboard</h1>
+      <div class="progress-bar-container">
+        <span>진행률</span>
+        <div class="progress-bar">
+          <div class="progress-bar-fill" id="progressBar" style="width: 0%"></div>
+        </div>
+        <span class="progress-text" id="progressText">0%</span>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-grid">
+      <!-- Kanban Board -->
+      <div class="kanban-board" id="kanbanBoard">
+        <div class="kanban-column" data-status="backlog">
+          <div class="column-header">
+            <span class="column-title">📋 Backlog</span>
+            <span class="column-count" id="backlogCount">0</span>
+          </div>
+          <div class="column-tasks" id="backlogTasks"></div>
+        </div>
+
+        <div class="kanban-column" data-status="progress">
+          <div class="column-header">
+            <span class="column-title">🚀 진행 중</span>
+            <span class="column-count" id="progressCount">0</span>
+          </div>
+          <div class="column-tasks" id="progressTasks"></div>
+        </div>
+
+        <div class="kanban-column" data-status="review">
+          <div class="column-header">
+            <span class="column-title">🔍 리뷰</span>
+            <span class="column-count" id="reviewCount">0</span>
+          </div>
+          <div class="column-tasks" id="reviewTasks"></div>
+        </div>
+
+        <div class="kanban-column" data-status="done">
+          <div class="column-header">
+            <span class="column-title">✅ 완료</span>
+            <span class="column-count" id="doneCount">0</span>
+          </div>
+          <div class="column-tasks" id="doneTasks"></div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <!-- Current Task -->
+        <div class="sidebar-card current-task">
+          <h3>🎯 현재 작업</h3>
+          <div id="currentTask">
+            <p style="color:#888; font-size:13px;">PROGRESS.md를 로드하세요</p>
+          </div>
+        </div>
+
+        <!-- Recent Files -->
+        <div class="sidebar-card">
+          <h3>📁 최근 변경 파일</h3>
+          <ul class="file-list" id="fileList">
+            <li class="file-item" style="color:#888;">파일 목록이 여기에 표시됩니다</li>
+          </ul>
+          <div class="controls">
+            <button class="btn btn-secondary" onclick="refreshFiles()">🔄 새로고침</button>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="sidebar-card">
+          <h3>⚙️ 설정</h3>
+          <div class="controls" style="flex-direction:column;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+              <input type="checkbox" id="autoRefresh"> 자동 새로고침 (5초)
+            </label>
+          </div>
+          <p class="last-update" id="lastUpdate">마지막 업데이트: -</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let tasks = { backlog: [], progress: [], review: [], done: [] };
+    let autoRefreshInterval = null;
+
+    // Drop Zone
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('active');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('active');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('active');
+      const file = e.dataTransfer.files[0];
+      if (file) processFile(file);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) processFile(file);
+    });
+
+    // Process PROGRESS.md
+    function processFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target.result;
+        parsePROGRESS(content);
+        updateUI();
+        dropZone.style.display = 'none';
+        document.getElementById('lastUpdate').textContent = 
+          '마지막 업데이트: ' + new Date().toLocaleTimeString('ko-KR');
+      };
+      reader.readAsText(file);
+    }
+
+    // Parse PROGRESS.md
+    function parsePROGRESS(content) {
+      tasks = { backlog: [], progress: [], review: [], done: [] };
+      
+      const lines = content.split('\n');
+      let currentPhase = '';
+      
+      for (const line of lines) {
+        // Phase detection
+        if (line.startsWith('## Phase')) {
+          currentPhase = line.replace('## ', '').trim();
+          continue;
+        }
+
+        // Task detection
+        const taskMatch = line.match(/^- \[([ x])\] \*\*([^*]+)\*\*:\s*(.+)/);
+        if (taskMatch) {
+          const isComplete = taskMatch[1] === 'x';
+          const taskId = taskMatch[2].trim();
+          let taskName = taskMatch[3].trim();
+          
+          // Extract status emoji
+          let status = 'backlog';
+          if (taskName.includes('🚀')) {
+            status = 'progress';
+            taskName = taskName.replace('🚀', '').trim();
+          } else if (taskName.includes('🔍')) {
+            status = 'review';
+            taskName = taskName.replace('🔍', '').trim();
+          } else if (taskName.includes('✅') || isComplete) {
+            status = 'done';
+            taskName = taskName.replace('✅', '').trim();
+          } else if (taskName.includes('🔥')) {
+            status = 'backlog'; // blocker
+            taskName = taskName.replace('🔥', '').trim() + ' 🔥';
+          }
+
+          // Detect category
+          let category = 'backend';
+          const lowerName = taskName.toLowerCase();
+          if (lowerName.includes('ui') || lowerName.includes('프론트') || lowerName.includes('front') || lowerName.includes('화면')) {
+            category = 'frontend';
+          } else if (lowerName.includes('db') || lowerName.includes('데이터') || lowerName.includes('스키마')) {
+            category = 'database';
+          } else if (lowerName.includes('배포') || lowerName.includes('인프라') || lowerName.includes('설정')) {
+            category = 'infra';
+          } else if (lowerName.includes('테스트') || lowerName.includes('test')) {
+            category = 'test';
+          }
+
+          tasks[status].push({
+            id: taskId,
+            name: taskName,
+            category: category,
+            phase: currentPhase
+          });
+        }
+      }
+    }
+
+    // Update UI
+    function updateUI() {
+      // Update counts
+      document.getElementById('backlogCount').textContent = tasks.backlog.length;
+      document.getElementById('progressCount').textContent = tasks.progress.length;
+      document.getElementById('reviewCount').textContent = tasks.review.length;
+      document.getElementById('doneCount').textContent = tasks.done.length;
+
+      // Update progress bar
+      const total = Object.values(tasks).flat().length;
+      const done = tasks.done.length;
+      const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+      document.getElementById('progressBar').style.width = percent + '%';
+      document.getElementById('progressText').textContent = percent + '%';
+
+      // Render tasks
+      renderTasks('backlog', 'backlogTasks');
+      renderTasks('progress', 'progressTasks');
+      renderTasks('review', 'reviewTasks');
+      renderTasks('done', 'doneTasks');
+
+      // Update current task
+      if (tasks.progress.length > 0) {
+        const current = tasks.progress[0];
+        document.getElementById('currentTask').innerHTML = `
+          <div class="current-task-title">${current.id}</div>
+          <div style="font-size:14px;margin-bottom:8px;">${current.name}</div>
+          <div style="font-size:11px;color:#888;">${current.phase}</div>
+        `;
+      }
+    }
+
+    // Render tasks in column
+    function renderTasks(status, containerId) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = tasks[status].map(task => `
+        <div class="task-card ${task.category}">
+          <div class="task-id">${task.id}</div>
+          <div class="task-title">${task.name}</div>
+          <div class="task-meta">
+            <span class="task-category">${task.category}</span>
+            <span>${task.phase || ''}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Auto refresh
+    document.getElementById('autoRefresh').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        autoRefreshInterval = setInterval(() => {
+          // In real implementation, re-read the file
+          document.getElementById('lastUpdate').textContent = 
+            '마지막 업데이트: ' + new Date().toLocaleTimeString('ko-KR');
+        }, 5000);
+      } else {
+        clearInterval(autoRefreshInterval);
+      }
+    });
+
+    // Refresh files (placeholder)
+    function refreshFiles() {
+      document.getElementById('fileList').innerHTML = `
+        <li class="file-item">
+          <span class="path">src/auth/login.js</span>
+          <span class="status modified">수정됨</span>
+        </li>
+        <li class="file-item">
+          <span class="path">src/auth/register.js</span>
+          <span class="status created">생성됨</span>
+        </li>
+      `;
+    }
+  </script>
+</body>
+</html>

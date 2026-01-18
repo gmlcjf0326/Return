@@ -189,13 +189,11 @@ export default function AssessmentPage() {
   // 진단 완료 시 결과 페이지로 이동
   useEffect(() => {
     if (isCompleted && startTime) {
-      // 카메라 정지
-      if (isCameraActive) {
-        stopDetection();
-      }
+      // 카메라 정지는 컴포넌트 언마운트 시 useFaceDetection 훅의 cleanup에서 자동 처리됨
+      // stopDetection을 여기서 호출하면 의존성 변경으로 인한 race condition 발생
       router.push('/assessment/result');
     }
-  }, [isCompleted, startTime, router, isCameraActive, stopDetection]);
+  }, [isCompleted, startTime, router]);
 
   // 세션 확인 및 생성
   useEffect(() => {
@@ -366,6 +364,15 @@ export default function AssessmentPage() {
               </Card>
             </div>
           )}
+
+          {/* 숨겨진 비디오 요소 - startDetection() 호출 시 videoRef가 유효하도록 항상 DOM에 유지 */}
+          <video
+            ref={videoRef}
+            className="hidden"
+            autoPlay
+            playsInline
+            muted
+          />
         </div>
       </div>
     );
@@ -376,30 +383,41 @@ export default function AssessmentPage() {
     return (
       <div className="min-h-screen bg-[var(--neutral-50)] py-6 px-4">
         <div className="max-w-3xl mx-auto">
-          {/* 카메라 미리보기 (활성화된 경우) */}
-          {isCameraActive && (
-            <div className="fixed top-4 right-4 z-40">
-              <div className="relative">
-                <video
-                  ref={videoRef}
-                  className="w-24 h-24 rounded-full object-cover border-2 border-white shadow-lg"
-                  autoPlay
-                  playsInline
-                  muted
-                />
-                <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 shadow-md">
-                  <span className="text-lg">{emotionIcons[currentEmotion]}</span>
-                </div>
-                <button
-                  onClick={stopDetection}
-                  className="absolute -top-1 -left-1 w-5 h-5 bg-[var(--neutral-800)] text-white rounded-full text-xs flex items-center justify-center hover:bg-[var(--danger)] transition-colors"
-                  title="카메라 끄기"
-                >
-                  ×
-                </button>
-              </div>
+          {/* 카메라 미리보기 - 항상 DOM에 유지, CSS로 표시/숨김 */}
+          <div
+            className={`fixed bottom-24 right-4 z-50 transition-opacity duration-200 ${
+              isCameraActive ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+            style={isCameraActive ? {} : {
+              position: 'fixed',
+              left: '-9999px',
+              top: '-9999px',
+            }}
+          >
+            <div className="relative">
+              <video
+                ref={videoRef}
+                className="w-24 h-24 rounded-full object-cover border-2 border-white shadow-lg"
+                autoPlay
+                playsInline
+                muted
+              />
+              {isCameraActive && (
+                <>
+                  <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 shadow-md">
+                    <span className="text-lg">{emotionIcons[currentEmotion]}</span>
+                  </div>
+                  <button
+                    onClick={stopDetection}
+                    className="absolute -top-1 -left-1 w-5 h-5 bg-[var(--neutral-800)] text-white rounded-full text-xs flex items-center justify-center hover:bg-[var(--danger)] transition-colors"
+                    title="카메라 끄기"
+                  >
+                    ×
+                  </button>
+                </>
+              )}
             </div>
-          )}
+          </div>
 
           {/* 상단 진행률 */}
           <div className="mb-6">

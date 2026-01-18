@@ -7,9 +7,9 @@ import { AssessmentScene, TrainingScene } from './scenes';
 import { DemoControls } from './DemoControls';
 import { DemoProgress } from './DemoProgress';
 
-// 커서 클릭 애니메이션 컴포넌트 - 정확한 위치 클릭
+// 클릭 애니메이션 컴포넌트 - 리플 효과만 표시 (커서 제거)
 function CursorClickAnimation({ x, y, label, isActive }: { x: number; y: number; label?: string; isActive: boolean }) {
-  const [phase, setPhase] = useState<'hidden' | 'appear' | 'clicking' | 'ripple'>('hidden');
+  const [phase, setPhase] = useState<'hidden' | 'ripple'>('hidden');
 
   useEffect(() => {
     if (!isActive) {
@@ -17,17 +17,10 @@ function CursorClickAnimation({ x, y, label, isActive }: { x: number; y: number;
       return;
     }
 
-    // 1. 커서 나타남
-    setPhase('appear');
-
-    // 2. 클릭 (커서 눌림 효과)
-    const clickTimer = setTimeout(() => setPhase('clicking'), 300);
-
-    // 3. 리플 효과
-    const rippleTimer = setTimeout(() => setPhase('ripple'), 400);
+    // 리플 효과 시작
+    const rippleTimer = setTimeout(() => setPhase('ripple'), 100);
 
     return () => {
-      clearTimeout(clickTimer);
       clearTimeout(rippleTimer);
     };
   }, [isActive, x, y]);
@@ -43,37 +36,19 @@ function CursorClickAnimation({ x, y, label, isActive }: { x: number; y: number;
         transform: 'translate(-50%, -50%)',
       }}
     >
-      {/* 커서 SVG - 실제 마우스 포인터 모양 */}
-      <div className={`transition-transform duration-100 ${
-        phase === 'clicking' ? 'scale-90' : 'scale-100'
-      }`}>
-        <svg
-          className={`w-8 h-8 drop-shadow-lg transition-opacity duration-200 ${
-            phase === 'hidden' ? 'opacity-0' : 'opacity-100'
-          }`}
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <path
-            d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.48 0 .72-.58.38-.92L6.35 2.76a.5.5 0 0 0-.85.45Z"
-            fill="white"
-            stroke="#333"
-            strokeWidth="1.5"
-          />
-        </svg>
-      </div>
-
-      {/* 클릭 리플 효과 */}
-      {(phase === 'clicking' || phase === 'ripple') && (
+      {/* 클릭 리플 효과만 표시 */}
+      {phase === 'ripple' && (
         <>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-[var(--primary)]/40 rounded-full animate-ripple-out" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 bg-[var(--primary)]/60 rounded-full animate-ripple-out-delay" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-[var(--primary)]/40 rounded-full animate-ripple-out" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-[var(--primary)]/60 rounded-full animate-ripple-out-delay" />
+          {/* 중앙 포인트 */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-[var(--primary)] rounded-full" />
         </>
       )}
 
       {/* 라벨 */}
       {label && phase !== 'hidden' && (
-        <div className="absolute top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-[var(--neutral-800)] rounded-lg text-white text-xs whitespace-nowrap shadow-lg animate-fade-in-up">
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-[var(--neutral-800)] rounded-lg text-white text-xs whitespace-nowrap shadow-lg animate-fade-in-up">
           {label}
         </div>
       )}
@@ -236,25 +211,23 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-      {/* 데모 플레이어 컨테이너 - PC에서 더 넓게 */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70">
+      {/* 데모 플레이어 컨테이너 - 모바일에서 전체화면에 가깝게 */}
       <div
-        className="relative w-full max-w-sm md:max-w-md lg:max-w-lg bg-[var(--background)] rounded-3xl overflow-hidden shadow-2xl border border-[var(--neutral-200)]"
-        style={{ height: 'min(85vh, 700px)' }}
+        className="relative w-full max-w-[95vw] sm:max-w-md md:max-w-lg lg:max-w-xl bg-[var(--background)] rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl border border-[var(--neutral-200)]"
+        style={{ height: 'min(92vh, 750px)' }}
       >
-        {/* 헤더 - 실제 앱 스타일 */}
-        <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-white border-b border-[var(--neutral-200)]">
+        {/* 헤더 - 간소화 (제목만 표시) */}
+        <div className="absolute top-0 left-0 right-0 z-10 px-4 py-3 sm:p-4 bg-white/95 backdrop-blur-sm border-b border-[var(--neutral-200)]">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-[var(--neutral-800)] font-bold">{demoData.title}</h3>
-              <p className="text-[var(--neutral-500)] text-xs">{demoData.description}</p>
-            </div>
+            <h3 className="text-[var(--neutral-800)] font-bold text-base sm:text-lg">{demoData.title}</h3>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-[var(--neutral-100)] hover:bg-[var(--neutral-200)] flex items-center justify-center transition-colors"
+              className="w-10 h-10 rounded-full bg-[var(--neutral-100)] hover:bg-[var(--neutral-200)] flex items-center justify-center transition-colors"
+              aria-label="닫기"
             >
               <svg
-                className="w-4 h-4 text-[var(--neutral-600)]"
+                className="w-5 h-5 text-[var(--neutral-600)]"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -295,7 +268,6 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
           <DemoControls
             isPlaying={isPlaying}
             onPlayPause={handlePlayPause}
-            onSkip={handleSkip}
             onClose={onClose}
           />
         </div>
@@ -314,7 +286,7 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
           }
         }
         .animate-fade-in {
-          animation: fade-in 0.3s ease-out;
+          animation: fade-in 0.5s ease-out;
         }
 
         @keyframes fade-in-up {
@@ -328,19 +300,7 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
           }
         }
         .animate-fade-in-up {
-          animation: fade-in-up 0.3s ease-out forwards;
-        }
-
-        /* 자연스러운 커서 이동 */
-        @keyframes cursor-enter {
-          0% {
-            opacity: 0;
-            transform: translate(-50%, -50%) translate(-20px, -30px);
-          }
-          100% {
-            opacity: 1;
-            transform: translate(-50%, -50%) translate(0, 0);
-          }
+          animation: fade-in-up 0.5s ease-out forwards;
         }
 
         /* 리플 확산 (기본) */
@@ -355,7 +315,7 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
           }
         }
         .animate-ripple-out {
-          animation: ripple-out 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+          animation: ripple-out 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
         }
 
         /* 리플 확산 (지연) */
@@ -370,8 +330,8 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
           }
         }
         .animate-ripple-out-delay {
-          animation: ripple-out-delay 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-          animation-delay: 0.1s;
+          animation: ripple-out-delay 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+          animation-delay: 0.15s;
         }
       `}</style>
     </div>

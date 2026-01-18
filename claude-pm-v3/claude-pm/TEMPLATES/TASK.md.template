@@ -1,0 +1,83 @@
+# {{TASK_ID}}: {{TASK_NAME}}
+
+> **상태**: {{STATUS}}
+> **시작일**: {{START_DATE}}
+> **예상 소요**: {{ESTIMATE}}
+
+---
+
+## 🎯 목표
+
+{{TASK_GOAL}}
+
+---
+
+## ✅ 완료 조건
+
+- [ ] {{CONDITION_1}}
+- [ ] {{CONDITION_2}}
+- [ ] {{CONDITION_3}}
+- [ ] 테스트 통과
+
+---
+
+## 📋 서브태스크
+
+### {{SUBTASK_1_ID}}: {{SUBTASK_1_NAME}}
+- **상태**: ⏳
+- **설명**: {{SUBTASK_1_DESC}}
+- **예상 소요**: {{SUBTASK_1_ESTIMATE}}
+
+### {{SUBTASK_2_ID}}: {{SUBTASK_2_NAME}}
+- **상태**: ⏳
+- **설명**: {{SUBTASK_2_DESC}}
+- **예상 소요**: {{SUBTASK_2_ESTIMATE}}
+
+### {{SUBTASK_3_ID}}: {{SUBTASK_3_NAME}}
+- **상태**: ⏳
+- **설명**: {{SUBTASK_3_DESC}}
+- **예상 소요**: {{SUBTASK_3_ESTIMATE}}
+
+---
+
+## 📁 관련 파일
+
+```
+src/
+├── {{RELATED_FILE_1}}
+├── {{RELATED_FILE_2}}
+└── {{RELATED_FILE_3}}
+```
+
+---
+
+## 🔗 의존성
+
+### 선행 태스크
+- {{DEPENDS_ON}}
+
+### 후행 태스크
+- {{BLOCKS}}
+
+---
+
+## 📝 작업 로그
+
+### {{DATE}}
+- {{WORK_LOG}}
+
+---
+
+## 🚀 현재 진행 상황
+
+> 마지막 업데이트: {{LAST_UPDATE}}
+
+**현재 서브태스크**: {{CURRENT_SUBTASK}}
+**진행 내용**: {{CURRENT_PROGRESS}}
+**다음 단계**: {{NEXT_STEP}}
+
+---
+
+## ⚠️ 이슈 / 메모
+
+{{NOTES}}

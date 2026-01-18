@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Turbopack 비활성화 (MediaPipe 호환성 문제)
+  // Webpack을 사용하여 MediaPipe 모듈 스텁 처리
+
   // 이미지 최적화 설정
   images: {
     remotePatterns: [
@@ -66,6 +69,27 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
     ];
+  },
+
+  // Webpack 설정 - MediaPipe 모듈 스텁 처리
+  webpack: (config, { isServer }) => {
+    // MediaPipe 모듈을 빈 모듈로 대체 (TensorFlow.js 백엔드 사용 시 불필요)
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@mediapipe/face_mesh': false,
+      '@mediapipe/pose': false,
+    };
+
+    // 클라이언트 빌드에서 fs 모듈 제외
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+      };
+    }
+
+    return config;
   },
 };
 

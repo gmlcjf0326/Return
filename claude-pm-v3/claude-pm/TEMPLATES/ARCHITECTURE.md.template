@@ -1,0 +1,178 @@
+# 🏗️ 아키텍처 문서
+
+> **프로젝트**: {{PROJECT_NAME}}
+> **최종 업데이트**: {{LAST_UPDATE}}
+
+---
+
+## 📌 시스템 개요
+
+{{SYSTEM_OVERVIEW}}
+
+---
+
+## 🛠️ 기술 스택
+
+### Backend
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| {{BACKEND_TECH}} | {{VERSION}} | {{PURPOSE}} |
+
+### Frontend
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| {{FRONTEND_TECH}} | {{VERSION}} | {{PURPOSE}} |
+
+### Database
+| 기술 | 버전 | 용도 |
+|------|------|------|
+| {{DB_TECH}} | {{VERSION}} | {{PURPOSE}} |
+
+### Infrastructure
+| 기술 | 용도 |
+|------|------|
+| {{INFRA_TECH}} | {{PURPOSE}} |
+
+---
+
+## 📁 폴더 구조
+
+```
+{{PROJECT_ROOT}}/
+├── src/
+│   ├── config/           # 설정 파일
+│   ├── controllers/      # 요청 처리
+│   ├── services/         # 비즈니스 로직
+│   ├── models/           # 데이터 모델
+│   ├── middlewares/      # 미들웨어
+│   ├── routes/           # 라우트 정의
+│   └── utils/            # 유틸리티
+├── tests/                # 테스트 코드
+├── docs/                 # 문서
+└── {{OTHER_FOLDERS}}
+```
+
+### 폴더별 설명
+
+| 폴더 | 역할 | 예시 |
+|------|------|------|
+| `controllers/` | HTTP 요청/응답 처리 | `userController.js` |
+| `services/` | 비즈니스 로직 | `userService.js` |
+| `models/` | 데이터 스키마 | `User.js` |
+| `middlewares/` | 요청 전처리 | `authMiddleware.js` |
+
+---
+
+## 🔄 데이터 흐름
+
+```
+[Client]
+    │
+    ▼
+[Routes] → 라우트 매칭
+    │
+    ▼
+[Middlewares] → 인증, 검증
+    │
+    ▼
+[Controllers] → 요청 처리
+    │
+    ▼
+[Services] → 비즈니스 로직
+    │
+    ▼
+[Models/Repository] → 데이터 접근
+    │
+    ▼
+[Database]
+```
+
+---
+
+## 🗄️ 데이터베이스 스키마
+
+### 주요 테이블
+
+#### {{TABLE_NAME}}
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | INT | PK |
+| {{COLUMN}} | {{TYPE}} | {{DESC}} |
+| created_at | TIMESTAMP | 생성일 |
+| updated_at | TIMESTAMP | 수정일 |
+
+### ERD (관계도)
+```
+{{ERD_DIAGRAM}}
+```
+
+---
+
+## 🔐 인증/보안
+
+### 인증 방식
+- **방식**: {{AUTH_METHOD}} (예: JWT)
+- **토큰 저장**: {{TOKEN_STORAGE}}
+- **만료 시간**: {{EXPIRY}}
+
+### 보안 조치
+- [ ] HTTPS 적용
+- [ ] CORS 설정
+- [ ] Rate Limiting
+- [ ] Input Validation
+- [ ] SQL Injection 방지
+
+---
+
+## 📡 API 설계
+
+### 엔드포인트 목록
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/users` | 사용자 목록 |
+| POST | `/api/users` | 사용자 생성 |
+| GET | `/api/users/:id` | 사용자 상세 |
+| PUT | `/api/users/:id` | 사용자 수정 |
+| DELETE | `/api/users/:id` | 사용자 삭제 |
+
+### 응답 형식
+```json
+{
+  "success": true,
+  "data": { ... },
+  "message": "Success"
+}
+```
+
+### 에러 형식
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Error message"
+  }
+}
+```
+
+---
+
+## 🚀 배포 구조
+
+```
+{{DEPLOYMENT_DIAGRAM}}
+```
+
+### 환경별 설정
+| 환경 | URL | 설명 |
+|------|-----|------|
+| Development | localhost:3000 | 개발 |
+| Staging | staging.example.com | 테스트 |
+| Production | example.com | 운영 |
+
+---
+
+## 📝 참고 사항
+
+{{NOTES}}

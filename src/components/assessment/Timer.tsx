@@ -36,13 +36,13 @@ export default function Timer({
   }, [duration, questionIndex]);
 
   // 타이머 로직 - 상태 업데이트만 수행
+  // questionIndex가 변경되면 새 인터벌 생성 필요
   useEffect(() => {
     if (!isRunning) return;
 
     const interval = setInterval(() => {
       setRemainingSeconds((prev) => {
         if (prev <= 1) {
-          clearInterval(interval);
           return 0;
         }
         return prev - 1;
@@ -50,7 +50,7 @@ export default function Timer({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, [isRunning, questionIndex]);
 
   // onTick 콜백 - 렌더링 후 별도로 실행
   useEffect(() => {
