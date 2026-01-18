@@ -31,6 +31,9 @@ const nextConfig: NextConfig = {
     },
   },
 
+  // Turbopack 설정 (빈 설정 - webpack 사용 명시)
+  turbopack: {},
+
   // 환경 변수 (클라이언트에 노출할 변수)
   env: {
     NEXT_PUBLIC_APP_NAME: 'Re:turn',
