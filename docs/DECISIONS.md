@@ -1,6 +1,6 @@
 # 기술 결정 기록 (ADR - Architecture Decision Records)
 
-> **프로젝트**: ReMemory
+> **프로젝트**: Re:turn
 > **목적**: 주요 기술 결정과 그 이유를 기록하여 나중에 "왜 이렇게 했지?" 질문에 답변
 
 ---

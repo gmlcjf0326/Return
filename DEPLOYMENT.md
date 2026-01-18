@@ -1,4 +1,4 @@
-# ReMemory 배포 가이드
+# Re:turn 배포 가이드
 
 ## 🚀 Vercel 배포 (권장)
 
@@ -109,13 +109,13 @@ npm run dev
 
 1. Docker Compose로 PostgreSQL 실행:
 ```bash
-docker run --name rememory-db -e POSTGRES_PASSWORD=password -p 5432:5432 -d postgres:15
+docker run --name return-db -e POSTGRES_PASSWORD=password -p 5432:5432 -d postgres:15
 ```
 
 2. `.env.local` 설정:
 ```
-DATABASE_URL="postgresql://postgres:password@localhost:5432/rememory"
-DIRECT_URL="postgresql://postgres:password@localhost:5432/rememory"
+DATABASE_URL="postgresql://postgres:password@localhost:5432/return"
+DIRECT_URL="postgresql://postgres:password@localhost:5432/return"
 ```
 
 3. DB 초기화:

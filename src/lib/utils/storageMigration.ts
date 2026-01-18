@@ -1,6 +1,6 @@
 /**
  * localStorage 마이그레이션 유틸리티
- * ReMemory → Re:turn 브랜드 변경에 따른 저장소 키 변경
+ * 기존 rememory 키에서 return 키로 변경
  */
 
 const MIGRATION_KEY_MAP: Record<string, string> = {

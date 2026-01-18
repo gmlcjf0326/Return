@@ -1,4 +1,4 @@
-# ReMemory 개발 진행 기록
+# Re:turn 개발 진행 기록
 
 > AI 기반 회상치료 플랫폼 개발 히스토리
 
@@ -31,7 +31,7 @@
 
 **파일 구조**:
 ```
-rememory/
+return/
 ├── src/app/
 ├── src/components/
 ├── src/hooks/
@@ -213,7 +213,7 @@ rememory/
 
 ---
 
-## Phase 3: ReMemory 기능 확장 ✅
+## Phase 3: Re:turn 기능 확장 ✅
 
 ### 완료일: 2025-01-16
 
