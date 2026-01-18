@@ -4,6 +4,8 @@ export { default as MemoryGameDemo } from './MemoryGameDemo';
 export { default as CalculationDemo } from './CalculationDemo';
 export { default as LanguageDemo } from './LanguageDemo';
 export { default as ReminiscenceDemo } from './ReminiscenceDemo';
+export { default as VoiceDemo } from './VoiceDemo';
+export { default as MovementDemo } from './MovementDemo';
 export type { DemoType } from './DemoModal';
 
 // 자동 재생 데모

@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { ChatInterface, PhotoContext } from '@/components/reminiscence';
@@ -15,6 +15,7 @@ import { usePhotoStore } from '@/store/photoStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { Button, Card } from '@/components/ui';
 import type { PhotoData } from '@/components/photos/PhotoCard';
+import type { UserProfileForChat } from '@/types';
 import { findSameDatePhotos, findRelatedPhotos, formatPhotoDate } from '@/lib/utils/photoUtils';
 import { getCategoryLabel, getCategoryIcon, getCategoryColor } from '@/data/photoCategories';
 
@@ -38,6 +39,16 @@ function ReminiscenceContent() {
   // 관련 사진
   const [sameDatePhotos, setSameDatePhotos] = useState<PhotoData[]>([]);
   const [relatedPhotos, setRelatedPhotos] = useState<PhotoData[]>([]);
+
+  // 세션에서 사용자 프로필 정보 추출
+  const userProfile: UserProfileForChat = useMemo(() => ({
+    nickname: session?.nickname,
+    birthYear: session?.birthYear,
+    age: session?.birthYear ? new Date().getFullYear() - session.birthYear : undefined,
+    gender: session?.profileData?.gender,
+    region: session?.profileData?.region,
+    interests: session?.profileData?.interests,
+  }), [session?.nickname, session?.birthYear, session?.profileData?.gender, session?.profileData?.region, session?.profileData?.interests]);
 
   // 세션 확인 및 더미 데이터 초기화
   useEffect(() => {
@@ -75,6 +86,8 @@ function ReminiscenceContent() {
             sessionId,
             // 더미 데이터 지원을 위해 photoData 전달
             photoData: currentPhoto,
+            // 사용자 프로필 정보 전달
+            userProfile,
           }),
         });
 
@@ -105,7 +118,7 @@ function ReminiscenceContent() {
     };
 
     initializeSession();
-  }, [currentPhoto, sessionId, isInitialized]);
+  }, [currentPhoto, sessionId, isInitialized, userProfile]);
 
   // 메시지 전송
   const handleSendMessage = useCallback(
@@ -137,6 +150,8 @@ function ReminiscenceContent() {
             })),
             // 더미 데이터 지원을 위해 photoData 전달
             photoData: currentPhoto,
+            // 사용자 프로필 정보 전달
+            userProfile,
           }),
         });
 
@@ -173,7 +188,7 @@ function ReminiscenceContent() {
         setIsLoading(false);
       }
     },
-    [currentPhoto, sessionId, messages]
+    [currentPhoto, sessionId, messages, userProfile]
   );
 
   // 다른 사진으로 전환

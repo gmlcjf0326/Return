@@ -16,6 +16,7 @@ import {
   buildDiaryPrompt,
   type DiaryImageStyle,
   type GeneratedImage,
+  DEFAULT_DIARY_STYLE,
 } from '@/lib/ai/imageGeneration';
 import { formatPhotoDate } from '@/lib/utils/photoUtils';
 import type { PhotoData } from '@/components/photos/PhotoCard';
@@ -36,7 +37,8 @@ export default function ReminiscenceResultPage() {
   const [conversationData, setConversationData] = useState<ConversationData | null>(null);
   const [summary, setSummary] = useState<string>('');
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
-  const [selectedStyle, setSelectedStyle] = useState<DiaryImageStyle>('watercolor');
+  // 스타일은 색연필 스케치로 고정
+  const selectedStyle: DiaryImageStyle = DEFAULT_DIARY_STYLE;
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,17 +92,6 @@ export default function ReminiscenceResultPage() {
       }
     },
     []
-  );
-
-  // 스타일 변경 핸들러
-  const handleStyleChange = useCallback(
-    async (style: DiaryImageStyle) => {
-      setSelectedStyle(style);
-      if (conversationData && summary) {
-        await generateImageWithStyle(conversationData.photoData, summary, style);
-      }
-    },
-    [conversationData, summary, generateImageWithStyle]
   );
 
   // 저장 기능 (TODO: 실제 저장 로직)
@@ -192,7 +183,6 @@ export default function ReminiscenceResultPage() {
             summary={summary}
             date={date}
             selectedStyle={selectedStyle}
-            onStyleChange={handleStyleChange}
             isPlaceholder={generatedImage?.isPlaceholder ?? true}
           />
         </SketchbookFrame>

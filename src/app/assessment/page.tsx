@@ -9,8 +9,8 @@ import type { AssessmentQuestion as DataQuestion, CognitiveCategory } from '@/da
 import { checkAnswer, calculateQuestionScore } from '@/lib/scoring';
 import Card, { CardHeader, CardContent } from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { QuestionCard, AssessmentProgress } from '@/components/assessment';
-import { useFaceDetection, emotionIcons, emotionLabels } from '@/hooks/useFaceDetection';
+import { QuestionCard, AssessmentProgress, CameraPreview } from '@/components/assessment';
+import { useFaceDetection } from '@/hooks/useFaceDetection';
 
 // 데이터 타입을 스토어 타입으로 변환
 function convertQuestion(q: DataQuestion): import('@/types').AssessmentQuestion {
@@ -53,6 +53,7 @@ export default function AssessmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCameraPrompt, setShowCameraPrompt] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // 입력 필드 참조 (자동 포커스용)
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,12 +66,13 @@ export default function AssessmentPage() {
     currentEmotion,
     emotionTimeline,
     videoRef,
+    stream,
     startDetection,
     stopDetection,
     recordEmotionForQuestion,
   } = useFaceDetection({
     enabled: cameraEnabled,
-    detectionInterval: 2000, // 2초마다 감정 감지
+    detectionInterval: 1000, // 1초마다 감정 감지
   });
 
   // 현재 문항 (원본 데이터)
@@ -188,12 +190,13 @@ export default function AssessmentPage() {
 
   // 진단 완료 시 결과 페이지로 이동
   useEffect(() => {
-    if (isCompleted && startTime) {
+    if (isCompleted && startTime && !isNavigating) {
+      setIsNavigating(true);
       // 카메라 정지는 컴포넌트 언마운트 시 useFaceDetection 훅의 cleanup에서 자동 처리됨
       // stopDetection을 여기서 호출하면 의존성 변경으로 인한 race condition 발생
       router.push('/assessment/result');
     }
-  }, [isCompleted, startTime, router]);
+  }, [isCompleted, startTime, router, isNavigating]);
 
   // 세션 확인 및 생성
   useEffect(() => {
@@ -366,9 +369,12 @@ export default function AssessmentPage() {
           )}
 
           {/* 숨겨진 비디오 요소 - startDetection() 호출 시 videoRef가 유효하도록 항상 DOM에 유지 */}
+          {/* TensorFlow 얼굴 감지를 위해 크기 유지 필요 */}
           <video
             ref={videoRef}
-            className="hidden"
+            className="fixed -left-[9999px] w-[640px] h-[480px] opacity-0 pointer-events-none"
+            width={640}
+            height={480}
             autoPlay
             playsInline
             muted
@@ -383,41 +389,25 @@ export default function AssessmentPage() {
     return (
       <div className="min-h-screen bg-[var(--neutral-50)] py-6 px-4">
         <div className="max-w-3xl mx-auto">
-          {/* 카메라 미리보기 - 항상 DOM에 유지, CSS로 표시/숨김 */}
-          <div
-            className={`fixed bottom-24 right-4 z-50 transition-opacity duration-200 ${
-              isCameraActive ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
-            style={isCameraActive ? {} : {
-              position: 'fixed',
-              left: '-9999px',
-              top: '-9999px',
-            }}
-          >
-            <div className="relative">
-              <video
-                ref={videoRef}
-                className="w-24 h-24 rounded-full object-cover border-2 border-white shadow-lg"
-                autoPlay
-                playsInline
-                muted
-              />
-              {isCameraActive && (
-                <>
-                  <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 shadow-md">
-                    <span className="text-lg">{emotionIcons[currentEmotion]}</span>
-                  </div>
-                  <button
-                    onClick={stopDetection}
-                    className="absolute -top-1 -left-1 w-5 h-5 bg-[var(--neutral-800)] text-white rounded-full text-xs flex items-center justify-center hover:bg-[var(--danger)] transition-colors"
-                    title="카메라 끄기"
-                  >
-                    ×
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
+          {/* 숨겨진 비디오 요소 - 얼굴 감지 전용 (TensorFlow용 크기 유지) */}
+          <video
+            ref={videoRef}
+            className="fixed -left-[9999px] w-[640px] h-[480px] opacity-0 pointer-events-none"
+            width={640}
+            height={480}
+            autoPlay
+            playsInline
+            muted
+          />
+
+          {/* 카메라 미리보기 컴포넌트 */}
+          {isCameraActive && stream && (
+            <CameraPreview
+              stream={stream}
+              currentEmotion={currentEmotion}
+              onStop={stopDetection}
+            />
+          )}
 
           {/* 상단 진행률 */}
           <div className="mb-6">
@@ -469,6 +459,18 @@ export default function AssessmentPage() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // 결과 페이지로 이동 중
+  if (isNavigating || (isCompleted && startTime)) {
+    return (
+      <div className="min-h-screen bg-[var(--neutral-50)] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-[var(--primary)] border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-[var(--neutral-600)]">결과를 분석하고 있습니다...</p>
         </div>
       </div>
     );

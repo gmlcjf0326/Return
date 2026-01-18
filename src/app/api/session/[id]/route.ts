@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/db/prisma';
+import { prisma } from '@/lib/db/prisma';
 import type { ApiResponse, Session } from '@/types';
 
 // GET /api/session/[id] - 세션 조회

@@ -7,55 +7,6 @@ import { AssessmentScene, TrainingScene } from './scenes';
 import { DemoControls } from './DemoControls';
 import { DemoProgress } from './DemoProgress';
 
-// 클릭 애니메이션 컴포넌트 - 리플 효과만 표시 (커서 제거)
-function CursorClickAnimation({ x, y, label, isActive }: { x: number; y: number; label?: string; isActive: boolean }) {
-  const [phase, setPhase] = useState<'hidden' | 'ripple'>('hidden');
-
-  useEffect(() => {
-    if (!isActive) {
-      setPhase('hidden');
-      return;
-    }
-
-    // 리플 효과 시작
-    const rippleTimer = setTimeout(() => setPhase('ripple'), 100);
-
-    return () => {
-      clearTimeout(rippleTimer);
-    };
-  }, [isActive, x, y]);
-
-  if (!isActive) return null;
-
-  return (
-    <div
-      className="absolute pointer-events-none z-20"
-      style={{
-        left: `${x}%`,
-        top: `${y}%`,
-        transform: 'translate(-50%, -50%)',
-      }}
-    >
-      {/* 클릭 리플 효과만 표시 */}
-      {phase === 'ripple' && (
-        <>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-[var(--primary)]/40 rounded-full animate-ripple-out" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-[var(--primary)]/60 rounded-full animate-ripple-out-delay" />
-          {/* 중앙 포인트 */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-[var(--primary)] rounded-full" />
-        </>
-      )}
-
-      {/* 라벨 */}
-      {label && phase !== 'hidden' && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-[var(--neutral-800)] rounded-lg text-white text-xs whitespace-nowrap shadow-lg animate-fade-in-up">
-          {label}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // 타이핑 애니메이션 텍스트 컴포넌트
 function TypewriterText({ text, isActive, speed = 50 }: { text: string; isActive: boolean; speed?: number }) {
   const [displayText, setDisplayText] = useState('');
@@ -103,7 +54,6 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
   const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [sceneProgress, setSceneProgress] = useState(0);
-  const [showClickAnimation, setShowClickAnimation] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const progressRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -117,7 +67,6 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
     } else {
       setCurrentSceneIndex((prev) => prev + 1);
       setSceneProgress(0);
-      setShowClickAnimation(false);
     }
   }, [isLastScene, onClose]);
 
@@ -125,8 +74,8 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
   useEffect(() => {
     if (!isPlaying || !currentScene) return;
 
-    // 진행률 업데이트 (60fps 기준)
-    const progressInterval = 50; // 50ms마다 업데이트
+    // 진행률 업데이트 (50ms마다)
+    const progressInterval = 50;
     const totalSteps = currentScene.duration / progressInterval;
     let currentStep = 0;
 
@@ -135,15 +84,7 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
       setSceneProgress((currentStep / totalSteps) * 100);
     }, progressInterval);
 
-    // 액션 씬일 경우 클릭 애니메이션 타이밍
-    let clickDelayTimer: NodeJS.Timeout | null = null;
-    if (currentScene.type === 'action' && currentScene.highlight) {
-      clickDelayTimer = setTimeout(() => {
-        setShowClickAnimation(true);
-      }, 200);
-    }
-
-    // 씬 전환 타이머 (모든 씬에 적용)
+    // 씬 전환 타이머
     timerRef.current = setTimeout(() => {
       goToNextScene();
     }, currentScene.duration);
@@ -151,7 +92,6 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (progressRef.current) clearInterval(progressRef.current);
-      if (clickDelayTimer) clearTimeout(clickDelayTimer);
     };
   }, [currentSceneIndex, isPlaying, currentScene, goToNextScene]);
 
@@ -164,7 +104,6 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
   const handleSkip = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (progressRef.current) clearInterval(progressRef.current);
-    setShowClickAnimation(false);
     goToNextScene();
   };
 
@@ -181,24 +120,21 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
 
     if (scene.type === 'action') {
       return (
-        <div className="relative h-full">
-          {/* 이전 씬 화면 유지 */}
+        <>
+          {/* 씬 화면 */}
           {type === 'assessment' ? (
             <AssessmentScene screenType={scene.screenType} />
           ) : (
             <TrainingScene screenType={scene.screenType} />
           )}
 
-          {/* 커서 클릭 애니메이션 */}
-          {scene.highlight && (
-            <CursorClickAnimation
-              x={scene.highlight.x}
-              y={scene.highlight.y}
-              label={scene.actionLabel}
-              isActive={showClickAnimation}
-            />
+          {/* 액션 라벨 표시 (커서 대신 하단에 안내 텍스트) */}
+          {scene.actionLabel && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-[var(--neutral-800)]/90 text-white text-sm rounded-full shadow-lg animate-fade-in">
+              👆 {scene.actionLabel}
+            </div>
           )}
-        </div>
+        </>
       );
     }
 
@@ -243,14 +179,16 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
           </div>
         </div>
 
-        {/* 씬 컨텐츠 */}
-        <div
-          className={`h-full pt-16 pb-32 transition-opacity duration-300 ${
-            currentScene.transition === 'fade' ? 'animate-fade-in' : ''
-          }`}
-          key={currentScene.id}
-        >
-          {renderSceneContent(currentScene)}
+        {/* 씬 컨텐츠 - 패딩은 바깥에, relative 컨테이너는 안쪽에 */}
+        <div className="h-full pt-16 pb-32">
+          <div
+            className={`relative h-full transition-opacity duration-300 ${
+              currentScene.transition === 'fade' ? 'animate-fade-in' : ''
+            }`}
+            key={currentScene.id}
+          >
+            {renderSceneContent(currentScene)}
+          </div>
         </div>
 
         {/* 컨트롤 영역 - 실제 앱 스타일 */}
@@ -301,6 +239,24 @@ export function DemoPlayer({ type, onClose }: DemoPlayerProps) {
         }
         .animate-fade-in-up {
           animation: fade-in-up 0.5s ease-out forwards;
+        }
+
+        /* 커서 진입 애니메이션 */
+        @keyframes cursor-enter {
+          0% {
+            opacity: 0;
+            transform: translate(-30px, -40px);
+          }
+          40% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 1;
+            transform: translate(0, 0);
+          }
+        }
+        .animate-cursor-enter {
+          animation: cursor-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
 
         /* 리플 확산 (기본) */

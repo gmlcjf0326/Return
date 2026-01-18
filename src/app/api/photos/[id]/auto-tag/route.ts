@@ -51,8 +51,11 @@ export async function POST(
 
     // 로컬 파일인 경우 base64로 변환하거나 public URL 사용
     if (imageUrl.startsWith('/')) {
-      // development에서는 localhost 사용
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
+      // Vercel 배포 환경에서는 VERCEL_URL 사용, 로컬에서는 localhost
+      const baseUrl =
+        process.env.NEXT_PUBLIC_BASE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+        `http://localhost:${process.env.PORT || 3000}`;
       imageUrl = `${baseUrl}${photo.fileUrl}`;
     }
 

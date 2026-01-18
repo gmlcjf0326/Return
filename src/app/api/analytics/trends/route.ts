@@ -5,11 +5,20 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
-    const limit = parseInt(searchParams.get('limit') ?? '10');
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam, 10) : 10;
 
     if (!sessionId) {
       return NextResponse.json(
         { error: 'sessionId is required' },
+        { status: 400 }
+      );
+    }
+
+    // limit 파라미터 검증
+    if (isNaN(limit) || limit < 1 || limit > 100) {
+      return NextResponse.json(
+        { error: 'limit must be a number between 1 and 100' },
         { status: 400 }
       );
     }

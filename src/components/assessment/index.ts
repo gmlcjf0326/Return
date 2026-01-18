@@ -7,3 +7,4 @@ export { default as Timer } from './Timer';
 export { default as AssessmentProgress } from './AssessmentProgress';
 export { default as AnswerInput } from './AnswerInput';
 export { default as QuestionCard, QuestionPreviewCard } from './QuestionCard';
+export { default as CameraPreview } from './CameraPreview';

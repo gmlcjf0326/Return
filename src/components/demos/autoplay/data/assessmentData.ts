@@ -31,8 +31,9 @@ export const assessmentDemoData: DemoData = {
       duration: 1500,
       screenType: 'assessment-start',
       actionLabel: '시작하기 클릭',
-      // 시작하기 버튼: 중앙 하단, 컨텐츠 영역 기준 약 70%
-      highlight: { x: 50, y: 68 },
+      // 시작하기 버튼: 중앙, justify-center 레이아웃에서 콘텐츠 하단
+      // PC에서 pt-16/pb-32 패딩 고려하여 조정
+      highlight: { x: 50, y: 58 },
     },
     {
       id: 'camera-permission',
@@ -49,8 +50,8 @@ export const assessmentDemoData: DemoData = {
       duration: 1500,
       screenType: 'camera-permission',
       actionLabel: '허용 클릭',
-      // 허용 버튼: 두 버튼 중 오른쪽, 중앙 하단
-      highlight: { x: 58, y: 66 },
+      // 허용 버튼: 두 버튼 중 오른쪽, justify-center 레이아웃 중앙
+      highlight: { x: 56, y: 54 },
     },
     {
       id: 'question-1',
@@ -67,8 +68,9 @@ export const assessmentDemoData: DemoData = {
       duration: 1500,
       screenType: 'memory-question',
       actionLabel: '기억했어요 클릭',
-      // 기억했어요 버튼: mt-auto로 하단, 두 버튼 중 왼쪽
-      highlight: { x: 38, y: 75 },
+      // 기억했어요 버튼: mt-auto로 하단 배치, 두 버튼 중 왼쪽
+      // pb-32 패딩 위 영역의 하단
+      highlight: { x: 40, y: 68 },
     },
     {
       id: 'question-2',
@@ -85,8 +87,8 @@ export const assessmentDemoData: DemoData = {
       duration: 1500,
       screenType: 'calculation-question',
       actionLabel: '86 입력',
-      // 입력 필드: 중앙, 컨텐츠 중간
-      highlight: { x: 50, y: 48 },
+      // 입력 필드: 중앙, 컨텐츠 영역 중간
+      highlight: { x: 50, y: 45 },
     },
     {
       id: 'analyzing',

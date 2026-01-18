@@ -1,82 +1,25 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTrainingStore } from '@/store/trainingStore';
 import { Button, Card, CardHeader, CardContent, StatusBadge } from '@/components/ui';
+import { DemoModal, type DemoType } from '@/components/demos';
 
 export default function TrainingPage() {
   const router = useRouter();
   const { session, initSession } = useSessionStore();
   const { recentSessions } = useTrainingStore();
+  const [activeDemo, setActiveDemo] = useState<DemoType | null>(null);
 
   useEffect(() => {
     initSession();
   }, [initSession]);
 
+  // 순서: 음성 훈련, 동작 훈련, 회상 대화, 언어력 게임, 기억력 게임, 계산력 게임
   const trainingModules = [
-    {
-      id: 'memory-game',
-      title: '기억력 게임',
-      subtitle: 'Memory Card Game',
-      description: '카드 짝맞추기 게임으로 기억력을 훈련합니다. 같은 그림의 카드를 찾아 짝을 맞추세요.',
-      icon: (
-        <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-        </svg>
-      ),
-      bgColor: 'bg-purple-100',
-      href: '/training/memory-game',
-      status: 'available',
-      tags: ['기억력', '집중력'],
-    },
-    {
-      id: 'calculation',
-      title: '계산력 게임',
-      subtitle: 'Calculation Game',
-      description: '덧셈, 뺄셈, 곱셈, 나눗셈 문제를 풀며 계산 능력을 향상시킵니다.',
-      icon: (
-        <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-        </svg>
-      ),
-      bgColor: 'bg-blue-100',
-      href: '/training/calculation',
-      status: 'available',
-      tags: ['계산력', '논리력'],
-    },
-    {
-      id: 'language',
-      title: '언어력 게임',
-      subtitle: 'Language Game',
-      description: '단어 연상, 속담 완성, 반의어/유의어 문제로 언어 능력을 훈련합니다.',
-      icon: (
-        <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-        </svg>
-      ),
-      bgColor: 'bg-green-100',
-      href: '/training/language',
-      status: 'available',
-      tags: ['언어력', '어휘력'],
-    },
-    {
-      id: 'reminiscence',
-      title: '회상 대화',
-      subtitle: 'Reminiscence Therapy',
-      description: '개인 사진을 보며 AI와 추억을 나누는 회상치료 프로그램입니다.',
-      icon: (
-        <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-      ),
-      bgColor: 'bg-amber-100',
-      href: '/training/reminiscence',
-      status: 'available',
-      tags: ['회상', '정서'],
-    },
     {
       id: 'voice',
       title: '음성 훈련',
@@ -91,6 +34,7 @@ export default function TrainingPage() {
       href: '/training/voice',
       status: 'available',
       tags: ['음성', '발화'],
+      demoType: 'voice' as DemoType,
     },
     {
       id: 'movement',
@@ -106,6 +50,71 @@ export default function TrainingPage() {
       href: '/training/movement',
       status: 'available',
       tags: ['동작', '신체'],
+      demoType: 'movement' as DemoType,
+    },
+    {
+      id: 'reminiscence',
+      title: '회상 대화',
+      subtitle: 'Reminiscence Therapy',
+      description: '개인 사진을 보며 AI와 추억을 나누는 회상치료 프로그램입니다.',
+      icon: (
+        <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      ),
+      bgColor: 'bg-amber-100',
+      href: '/training/reminiscence',
+      status: 'available',
+      tags: ['회상', '정서'],
+      demoType: 'reminiscence' as DemoType,
+    },
+    {
+      id: 'language',
+      title: '언어력 게임',
+      subtitle: 'Language Game',
+      description: '단어 연상, 속담 완성, 반의어/유의어 문제로 언어 능력을 훈련합니다.',
+      icon: (
+        <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+        </svg>
+      ),
+      bgColor: 'bg-green-100',
+      href: '/training/language',
+      status: 'available',
+      tags: ['언어력', '어휘력'],
+      demoType: 'language' as DemoType,
+    },
+    {
+      id: 'memory-game',
+      title: '기억력 게임',
+      subtitle: 'Memory Card Game',
+      description: '카드 짝맞추기 게임으로 기억력을 훈련합니다. 같은 그림의 카드를 찾아 짝을 맞추세요.',
+      icon: (
+        <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+        </svg>
+      ),
+      bgColor: 'bg-purple-100',
+      href: '/training/memory-game',
+      status: 'available',
+      tags: ['기억력', '집중력'],
+      demoType: 'memory' as DemoType,
+    },
+    {
+      id: 'calculation',
+      title: '계산력 게임',
+      subtitle: 'Calculation Game',
+      description: '덧셈, 뺄셈, 곱셈, 나눗셈 문제를 풀며 계산 능력을 향상시킵니다.',
+      icon: (
+        <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      ),
+      bgColor: 'bg-blue-100',
+      href: '/training/calculation',
+      status: 'available',
+      tags: ['계산력', '논리력'],
+      demoType: 'calculation' as DemoType,
     },
   ];
 
@@ -142,8 +151,7 @@ export default function TrainingPage() {
           {trainingModules.map((module) => (
             <Card
               key={module.id}
-              className="hover:shadow-lg transition-all cursor-pointer group"
-              onClick={() => router.push(module.href)}
+              className="hover:shadow-lg transition-all group"
             >
               <CardContent className="p-6">
                 <div className="flex items-start gap-4">
@@ -156,15 +164,34 @@ export default function TrainingPage() {
                         <h3 className="text-xl font-bold text-[var(--neutral-800)]">{module.title}</h3>
                         <p className="text-sm text-[var(--neutral-500)]">{module.subtitle}</p>
                       </div>
-                      <svg className="w-6 h-6 text-slate-400 group-hover:text-[var(--primary)] group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
                     </div>
                     <p className="text-[var(--neutral-600)] text-sm mb-3">{module.description}</p>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 mb-4">
                       {module.tags.map((tag) => (
                         <StatusBadge key={tag} status="info" size="sm">{tag}</StatusBadge>
                       ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="primary"
+                        size="md"
+                        className="flex-1"
+                        onClick={() => router.push(module.href)}
+                      >
+                        시작하기
+                      </Button>
+                      {module.demoType && (
+                        <Button
+                          variant="outline"
+                          size="md"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveDemo(module.demoType);
+                          }}
+                        >
+                          체험하기
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -239,6 +266,11 @@ export default function TrainingPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Demo Modal */}
+      {activeDemo && (
+        <DemoModal type={activeDemo} onClose={() => setActiveDemo(null)} />
+      )}
     </div>
   );
 }

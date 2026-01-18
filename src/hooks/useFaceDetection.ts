@@ -60,6 +60,7 @@ interface UseFaceDetectionReturn {
   dominantEmotion: EmotionType;
   error: string | null;
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  stream: MediaStream | null;
   startDetection: () => Promise<boolean>;
   stopDetection: () => void;
   clearTimeline: () => void;
@@ -79,6 +80,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
   const [currentEmotion, setCurrentEmotion] = useState<EmotionType>('neutral');
   const [emotionTimeline, setEmotionTimeline] = useState<EmotionRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -97,7 +99,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
   // 웹캠 스트림 시작
   const startWebcam = useCallback(async (): Promise<boolean> => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 640 },
           height: { ideal: 480 },
@@ -107,20 +109,24 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
       });
 
       // 비디오 트랙 설정 로그
-      const videoTrack = stream.getVideoTracks()[0];
+      const videoTrack = mediaStream.getVideoTracks()[0];
       if (videoTrack) {
         const settings = videoTrack.getSettings();
         console.log('[FaceDetection] Video track settings:', settings);
       }
 
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        videoRef.current.srcObject = mediaStream;
         // 그레이스케일 필터 방지
         videoRef.current.style.filter = 'none';
+        // 비디오 크기 강제 설정 (TensorFlow 감지를 위해 필요)
+        videoRef.current.width = 640;
+        videoRef.current.height = 480;
         await videoRef.current.play();
       }
 
-      streamRef.current = stream;
+      streamRef.current = mediaStream;
+      setStream(mediaStream); // 반응형 상태 업데이트
       setIsPermissionGranted(true);
       return true;
     } catch (err) {
@@ -137,6 +143,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
+    setStream(null);
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
@@ -203,31 +210,33 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
     const rightBrowFrown = (rightEyebrowInner.y - rightEyeTop.y) / faceWidth;
     const browFrownRatio = (leftBrowFrown + rightBrowFrown) / 2;
 
-    // 감정 판정
+    // 감정 판정 (우선순위 순서로 체크)
+
     // 놀람: 눈 크게 뜸 + 입 벌림
-    if (eyeOpenRatio > 0.08 && mouthOpenRatio > 0.15) {
+    if (eyeOpenRatio > 0.08 && mouthOpenRatio > 0.12) {
       return 'surprised';
     }
 
-    // 행복: 미소 (입꼬리 올라감 + 입 너비 넓음)
-    if (smileRatio > 0.01 && mouthWidthRatio > 0.9) {
+    // 행복: 미소 (입꼬리 올라감 + 입 너비)
+    // 조건 완화: mouthWidthRatio 0.9 -> 0.7, smileRatio 체크 강화
+    if (smileRatio > 0.005 && mouthWidthRatio > 0.7) {
       return 'happy';
     }
 
+    // 슬픔: 입꼬리 내려감 (행복보다 먼저 체크하면 안됨)
+    if (smileRatio < -0.015) {
+      return 'sad';
+    }
+
     // 불안/긴장: 눈썹 찌푸림 + 입 다물음
-    if (browFrownRatio > 0.05 && mouthOpenRatio < 0.05) {
+    if (browFrownRatio > 0.06 && mouthOpenRatio < 0.04) {
       return 'anxious';
     }
 
-    // 혼란: 눈썹 비대칭 또는 약한 찌푸림
+    // 혼란: 눈썹 비대칭 (조건 강화 - 너무 쉽게 감지되지 않도록)
     const browAsymmetry = Math.abs(leftBrowFrown - rightBrowFrown);
-    if (browAsymmetry > 0.02 || (browFrownRatio > 0.03 && browFrownRatio < 0.05)) {
+    if (browAsymmetry > 0.035 || (browFrownRatio > 0.04 && browFrownRatio < 0.06)) {
       return 'confused';
-    }
-
-    // 슬픔: 입꼬리 내려감
-    if (smileRatio < -0.02) {
-      return 'sad';
     }
 
     return 'neutral';
@@ -240,8 +249,29 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
     try {
       const video = videoRef.current;
 
-      // 비디오가 준비되지 않았으면 스킵
-      if (video.readyState < 2) return;
+      // 비디오가 준비되지 않았으면 대기
+      if (video.readyState < 2) {
+        // 최대 500ms 대기
+        const waitForVideo = () => new Promise<boolean>((resolve) => {
+          if (video.readyState >= 2) {
+            resolve(true);
+            return;
+          }
+          const timeout = setTimeout(() => resolve(false), 500);
+          const onReady = () => {
+            clearTimeout(timeout);
+            video.removeEventListener('loadeddata', onReady);
+            resolve(true);
+          };
+          video.addEventListener('loadeddata', onReady);
+        });
+
+        const isReady = await waitForVideo();
+        if (!isReady) {
+          console.log('[FaceDetection] Video not ready, skipping');
+          return;
+        }
+      }
 
       // 얼굴 랜드마크 감지
       const faces = await detectorRef.current.estimateFaces(video, {
@@ -362,10 +392,23 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
       return;
     }
 
-    // async 함수를 인터벌에서 실행
-    const runDetection = () => {
-      detectEmotion();
+    // 중복 감지 방지 플래그
+    let isDetecting = false;
+
+    const runDetection = async () => {
+      if (isDetecting) return;
+      isDetecting = true;
+      try {
+        await detectEmotion();
+      } catch (err) {
+        console.warn('[FaceDetection] Detection loop error:', err);
+      } finally {
+        isDetecting = false;
+      }
     };
+
+    // 시작 시 즉시 실행
+    runDetection();
 
     detectionIntervalRef.current = setInterval(runDetection, detectionInterval);
 
@@ -416,6 +459,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
     dominantEmotion,
     error,
     videoRef,
+    stream, // 반응형 상태 사용
     startDetection,
     stopDetection,
     clearTimeline,

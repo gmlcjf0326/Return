@@ -117,30 +117,41 @@ export default function AnalyticsPage() {
     if (!sessionId) return;
 
     setIsLoading(true);
-    try {
-      const [summaryRes, trendsRes, trainingRes, recommendationsRes] = await Promise.all([
-        fetch(`/api/analytics/summary?sessionId=${sessionId}`),
-        fetch(`/api/analytics/trends?sessionId=${sessionId}`),
-        fetch(`/api/analytics/training-stats?sessionId=${sessionId}`),
-        fetch(`/api/analytics/recommendations?sessionId=${sessionId}`),
-      ]);
 
-      const [summaryData, trendsData, trainingData, recommendationsData] = await Promise.all([
-        summaryRes.json(),
-        trendsRes.json(),
-        trainingRes.json(),
-        recommendationsRes.json(),
-      ]);
+    // 개별 API 호출을 Promise.allSettled로 처리하여 일부 실패해도 다른 데이터는 표시
+    const results = await Promise.allSettled([
+      fetch(`/api/analytics/summary?sessionId=${sessionId}`).then(res => res.json()),
+      fetch(`/api/analytics/trends?sessionId=${sessionId}`).then(res => res.json()),
+      fetch(`/api/analytics/training-stats?sessionId=${sessionId}`).then(res => res.json()),
+      fetch(`/api/analytics/recommendations?sessionId=${sessionId}`).then(res => res.json()),
+    ]);
 
-      if (summaryData.success) setSummary(summaryData.data);
-      if (trendsData.success) setTrends(trendsData.data);
-      if (trainingData.success) setTrainingStats(trainingData.data);
-      if (recommendationsData.success) setRecommendations(recommendationsData.data);
-    } catch (error) {
-      console.error('Failed to fetch analytics:', error);
-    } finally {
-      setIsLoading(false);
+    // 개별 결과 처리
+    if (results[0].status === 'fulfilled' && results[0].value.success) {
+      setSummary(results[0].value.data);
+    } else {
+      console.error('Failed to fetch summary:', results[0].status === 'rejected' ? results[0].reason : 'API error');
     }
+
+    if (results[1].status === 'fulfilled' && results[1].value.success) {
+      setTrends(results[1].value.data);
+    } else {
+      console.error('Failed to fetch trends:', results[1].status === 'rejected' ? results[1].reason : 'API error');
+    }
+
+    if (results[2].status === 'fulfilled' && results[2].value.success) {
+      setTrainingStats(results[2].value.data);
+    } else {
+      console.error('Failed to fetch training stats:', results[2].status === 'rejected' ? results[2].reason : 'API error');
+    }
+
+    if (results[3].status === 'fulfilled' && results[3].value.success) {
+      setRecommendations(results[3].value.data);
+    } else {
+      console.error('Failed to fetch recommendations:', results[3].status === 'rejected' ? results[3].reason : 'API error');
+    }
+
+    setIsLoading(false);
   }, [sessionId]);
 
   useEffect(() => {

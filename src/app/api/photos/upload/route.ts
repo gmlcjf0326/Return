@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
+import { createServerSupabaseClient } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 
-// 업로드 디렉토리
-const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'photos');
+// Supabase Storage 버킷 이름
+const STORAGE_BUCKET = 'photos';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,23 +26,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 업로드 디렉토리 생성
-    await mkdir(UPLOAD_DIR, { recursive: true });
-
+    const supabase = createServerSupabaseClient();
     const uploadedPhotos = [];
 
     for (const file of files) {
       // 파일 확장자 추출
-      const ext = path.extname(file.name).toLowerCase();
-      const uniqueName = `${uuidv4()}${ext}`;
-      const filePath = path.join(UPLOAD_DIR, uniqueName);
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const uniqueName = `${sessionId}/${uuidv4()}.${ext}`;
 
-      // 파일 저장
-      const buffer = Buffer.from(await file.arrayBuffer());
-      await writeFile(filePath, buffer);
+      // 파일을 ArrayBuffer로 변환
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
 
-      // 웹 접근 가능한 URL
-      const fileUrl = `/uploads/photos/${uniqueName}`;
+      // Supabase Storage에 업로드
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(uniqueName, buffer, {
+          contentType: file.type || 'image/jpeg',
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error('Supabase Storage upload error:', uploadError);
+        // 버킷이 없는 경우 자동 생성 시도 (첫 실행 시)
+        if (uploadError.message?.includes('not found')) {
+          return NextResponse.json(
+            {
+              error: 'Storage bucket not configured',
+              message: 'Supabase Storage에 "photos" 버킷을 생성해주세요.',
+            },
+            { status: 500 }
+          );
+        }
+        throw uploadError;
+      }
+
+      // Public URL 생성
+      const { data: urlData } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(uniqueName);
+
+      const fileUrl = urlData.publicUrl;
 
       // DB에 저장
       const photo = await prisma.photo.create({

@@ -118,6 +118,11 @@ export default function PhotosPage() {
   const handleDelete = useCallback(async (photoId: string) => {
     const photo = photos.find(p => p.id === photoId);
 
+    // 선택 해제
+    if (selectedPhotoId === photoId) {
+      selectPhoto(null);
+    }
+
     // 더미 데이터는 로컬에서만 삭제
     if (photo?.isDummy) {
       removePhoto(photoId);
@@ -135,7 +140,7 @@ export default function PhotosPage() {
     } catch (err) {
       console.error('Failed to delete photo:', err);
     }
-  }, [photos, removePhoto]);
+  }, [photos, removePhoto, selectedPhotoId, selectPhoto]);
 
   // 회상 대화 시작
   const handleStartReminiscence = useCallback(() => {
@@ -369,16 +374,18 @@ export default function PhotosPage() {
                           이 사진으로 회상 대화 시작
                         </Button>
 
-                        {!selectedPhoto.isDummy && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full text-destructive hover:bg-destructive/10"
-                            onClick={() => handleDelete(selectedPhoto.id)}
-                          >
-                            사진 삭제
-                          </Button>
-                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            if (window.confirm('이 사진을 삭제하시겠습니까?')) {
+                              handleDelete(selectedPhoto.id);
+                            }
+                          }}
+                        >
+                          사진 삭제
+                        </Button>
                       </div>
                     </div>
                   ) : (

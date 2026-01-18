@@ -20,7 +20,6 @@ interface DiaryEntryProps {
   summary: string;
   date: string;
   selectedStyle: DiaryImageStyle;
-  onStyleChange?: (style: DiaryImageStyle) => void;
   isPlaceholder?: boolean;
   className?: string;
 }
@@ -31,7 +30,6 @@ export default function DiaryEntry({
   summary,
   date,
   selectedStyle,
-  onStyleChange,
   isPlaceholder = true,
   className,
 }: DiaryEntryProps) {
@@ -47,26 +45,6 @@ export default function DiaryEntry({
         <p className="text-sm text-muted-foreground">📅</p>
         <h2 className="text-xl font-bold mt-1">{date}</h2>
       </div>
-
-      {/* 이미지 스타일 선택 */}
-      {onStyleChange && (
-        <div className="flex justify-center gap-2 mb-4">
-          {(Object.keys(imageStyleInfo) as DiaryImageStyle[]).map((style) => (
-            <button
-              key={style}
-              onClick={() => onStyleChange(style)}
-              className={cn(
-                'px-3 py-1.5 text-sm rounded-full transition-all',
-                selectedStyle === style
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'bg-muted hover:bg-accent'
-              )}
-            >
-              {imageStyleInfo[style].icon} {imageStyleInfo[style].label}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* 이미지 영역 */}
       <div className="relative mx-auto max-w-md mb-6">

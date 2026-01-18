@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { usePoseDetection, type Keypoint } from '@/hooks/usePoseDetection';
+import { usePoseDetection, type Keypoint, type HandKeypoint } from '@/hooks/usePoseDetection';
 import { poseGuides, type MovementType, type PoseGuide } from '@/data/pose-guides';
 import Button from '@/components/ui/Button';
 
@@ -485,6 +485,9 @@ export default function MovementTraining({
   const {
     isLoading,
     keypoints,
+    leftHandKeypoints,
+    rightHandKeypoints,
+    faceKeypoints,
     videoRef,
     canvasRef,
     startDetection,
@@ -492,10 +495,14 @@ export default function MovementTraining({
   } = usePoseDetection({
     enabled: true,
     detectionInterval: 100, // 더 빠른 감지를 위해 100ms
+    enableHandDetection: true,
+    enableFaceDetection: true,
   });
 
   // 인식된 키포인트 수 계산
   const detectedKeypointsCount = keypoints.filter(kp => (kp.score || 0) > 0.3).length;
+  const detectedHandKeypointsCount = leftHandKeypoints.length + rightHandKeypoints.length;
+  const detectedFaceKeypointsCount = faceKeypoints.length;
 
   // 카운트다운 처리
   useEffect(() => {
@@ -583,6 +590,14 @@ export default function MovementTraining({
       }
     };
   }, [phase, guide, stopDetection, keypoints]);
+
+  // 컴포넌트 마운트 시 카메라 스트림 시작
+  useEffect(() => {
+    startDetection();
+    return () => {
+      stopDetection();
+    };
+  }, []);
 
   // 시작 버튼 클릭
   const handleStart = useCallback(async () => {
@@ -733,155 +748,232 @@ export default function MovementTraining({
         </div>
       </div>
 
-      {/* 동작 가이드 카드 */}
-      <div className="p-6 bg-[var(--neutral-50)] rounded-xl border-2 border-[var(--neutral-200)]">
-        {/* 동작 아이콘 및 이름 */}
-        <div className="text-center mb-4">
-          <span className="text-6xl mb-2 block">{guide.icon}</span>
-          <h3 className="text-2xl font-bold text-[var(--neutral-800)]">{guide.name}</h3>
-          <p className="text-[var(--neutral-600)] mt-1">{guide.description}</p>
+      {/* 카메라 에러 */}
+      {cameraError && (
+        <div className="p-4 bg-red-50 rounded-xl border border-red-200 mb-4">
+          <p className="text-red-700 text-center">{cameraError}</p>
         </div>
+      )}
 
-        {/* 안내 메시지 */}
-        <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 mb-4">
-          <p className="text-blue-800 text-lg text-center">{guide.instruction}</p>
-        </div>
+      {/* 통합 레이아웃 - ready/countdown/active 상태에서 카메라 영역 한 번만 렌더링 */}
+      {/* PC: 수직 레이아웃 (위: 카메라 / 아래: 정보 패널) - 겹침 문제 해결 */}
+      {(phase === 'ready' || phase === 'countdown' || phase === 'active') && (
+        <div className="flex flex-col gap-6">
+          {/* 카메라 영역 - 상단 전체 너비 */}
+          <div className="w-full">
+            <div className="relative w-full max-w-4xl mx-auto aspect-video bg-[var(--neutral-200)] rounded-xl overflow-hidden">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover transform scale-x-[-1]"
+                style={{ filter: 'none' }}
+              />
+              {/* 스켈레톤 오버레이 캔버스 */}
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                style={{ transform: 'scaleX(1)' }}
+              />
 
-        {/* 카메라 에러 */}
-        {cameraError && (
-          <div className="p-4 bg-red-50 rounded-xl border border-red-200 mb-4">
-            <p className="text-red-700 text-center">{cameraError}</p>
-          </div>
-        )}
+              {/* phase별 오버레이 - 조건부 렌더링 */}
 
-        {/* 카메라 피드 컨테이너 - 비디오 요소를 항상 DOM에 유지하여 스트림 할당 가능하게 함 */}
-        <div
-          className={`space-y-4 transition-opacity duration-200 ${
-            phase === 'countdown' || phase === 'active'
-              ? 'opacity-100'
-              : 'opacity-0 pointer-events-none'
-          }`}
-          style={{
-            // ready/result 상태에서는 화면 밖으로 이동하되 크기는 유지 (비디오 스트림 작동 보장)
-            ...(phase === 'ready' || phase === 'result' ? {
-              position: 'fixed',
-              left: '-9999px',
-              top: '-9999px',
-            } : {})
-          }}
-        >
-          <div className="relative aspect-video bg-[var(--neutral-200)] rounded-xl overflow-hidden">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover transform scale-x-[-1]"
-              style={{ filter: 'none' }}
-            />
-            {/* 스켈레톤 오버레이 캔버스 */}
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full pointer-events-none"
-              style={{ transform: 'scaleX(1)' }}
-            />
-            {/* 카운트다운 오버레이 */}
-            {phase === 'countdown' && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
-                <p className="text-white/80 mb-2">준비하세요!</p>
-                <div className="text-8xl font-bold text-white animate-pulse">
-                  {countdown}
-                </div>
-              </div>
-            )}
-            {/* active 상태 테두리 및 안내 */}
-            {phase === 'active' && (
-              <>
-                <div className="absolute inset-0 pointer-events-none border-4 border-[var(--primary)] rounded-xl" />
-                <div className="absolute top-4 left-4 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
-                  동작을 유지하세요
-                </div>
-                {/* 인식 상태 표시 */}
-                <div className="absolute top-4 right-4 bg-black/50 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${detectedKeypointsCount > 10 ? 'bg-green-400 animate-pulse' : detectedKeypointsCount > 5 ? 'bg-yellow-400' : 'bg-red-400'}`} />
-                  <span>
-                    {detectedKeypointsCount > 10 ? '인식 중' : detectedKeypointsCount > 5 ? '일부 인식' : '인식 대기'}
-                  </span>
-                </div>
-                {/* 감지된 키포인트 수 */}
-                <div className="absolute bottom-4 right-4 bg-black/50 text-white px-3 py-1 rounded-full text-xs">
-                  관절 감지: {detectedKeypointsCount}/17
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* 진행 바 - active 상태에서만 표시 */}
-          {phase === 'active' && (
-            <div className="space-y-3">
-              {/* 실시간 점수 표시 */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[var(--neutral-600)]">현재 점수</span>
-                <span className={`text-2xl font-bold ${getScoreColor(realtimeScore)}`}>
-                  {realtimeScore}점
-                </span>
-              </div>
-
-              {/* 실시간 피드백 메시지 */}
-              {currentFeedback && (
-                <div
-                  className={`p-3 rounded-xl text-center font-medium transition-all duration-200 ${
-                    currentFeedback.type === 'success'
-                      ? 'bg-green-50 text-green-700 border border-green-200'
-                      : currentFeedback.type === 'warning'
-                      ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
-                      : 'bg-blue-50 text-blue-700 border border-blue-200'
-                  }`}
-                >
-                  {currentFeedback.message}
+              {/* 카메라 로딩 오버레이 (ready 상태) */}
+              {isLoading && phase === 'ready' && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                  <div className="text-white text-center">
+                    <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-lg">카메라 준비 중...</p>
+                  </div>
                 </div>
               )}
 
-              {/* 진행도 바 */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-sm text-[var(--neutral-600)]">
-                  <span>진행도</span>
-                  <span>{Math.round(matchProgress)}%</span>
+              {/* 카운트다운 오버레이 */}
+              {phase === 'countdown' && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
+                  <p className="text-white/80 mb-2 text-lg">준비하세요!</p>
+                  <div className="text-8xl font-bold text-white animate-pulse">
+                    {countdown}
+                  </div>
                 </div>
-                <div className="h-4 bg-[var(--neutral-200)] rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-[var(--primary)] transition-all duration-100"
-                    style={{ width: `${matchProgress}%` }}
-                  />
+              )}
+
+              {/* active 상태 테두리 */}
+              {phase === 'active' && (
+                <div className="absolute inset-0 pointer-events-none border-4 border-[var(--primary)] rounded-xl" />
+              )}
+
+              {/* 감지 상태 표시 (좌상단) - active 상태 */}
+              {phase === 'active' && (
+                <div className="absolute top-4 left-4 bg-black/60 text-white px-3 py-2 rounded-lg text-sm">
+                  동작을 유지하세요
                 </div>
+              )}
+
+              {/* 인식 상태 표시 (우상단) - 모든 상태에서 표시 */}
+              <div className="absolute top-4 right-4 flex flex-col gap-2">
+                <div className="bg-black/60 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${detectedKeypointsCount > 10 ? 'bg-green-400 animate-pulse' : detectedKeypointsCount > 5 ? 'bg-yellow-400' : 'bg-red-400'}`} />
+                  <span>신체: {detectedKeypointsCount}/17</span>
+                </div>
+                {phase === 'active' && detectedHandKeypointsCount > 0 && (
+                  <div className="bg-black/60 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                    <span>손: {detectedHandKeypointsCount}/42</span>
+                  </div>
+                )}
+                {phase === 'active' && detectedFaceKeypointsCount > 0 && (
+                  <div className="bg-black/60 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-pink-400 animate-pulse" />
+                    <span>얼굴 감지됨</span>
+                  </div>
+                )}
               </div>
             </div>
-          )}
-        </div>
-
-        {/* 단계별 UI */}
-        {phase === 'ready' && (
-          <div className="text-center">
-            <p className="text-[var(--neutral-600)] mb-4">
-              카메라가 켜지면 동작을 따라해주세요
-            </p>
-            <button
-              onClick={handleStart}
-              disabled={isLoading}
-              className={`
-                px-8 py-4 rounded-xl font-bold text-lg
-                bg-[var(--primary)] text-white
-                hover:bg-[var(--primary-dark)] transition-all duration-200
-                ${isLoading ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}
-              `}
-            >
-              {isLoading ? '카메라 준비 중...' : '시작하기'}
-            </button>
           </div>
-        )}
 
-        {phase === 'result' && currentScore !== null && (
+          {/* 정보 패널 - 카메라 아래에 배치 */}
+          <div className="w-full max-w-4xl mx-auto">
+            {/* 정보 카드들을 그리드로 배치 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* 동작 가이드 카드 (모든 상태 공통) */}
+              <div className="p-5 bg-[var(--neutral-50)] rounded-xl border-2 border-[var(--neutral-200)]">
+                <div className="text-center">
+                  <span className="text-5xl mb-2 block">{guide.icon}</span>
+                  <h3 className="text-xl font-bold text-[var(--neutral-800)]">{guide.name}</h3>
+                  <p className="text-sm text-[var(--neutral-600)] mt-1">{guide.description}</p>
+                </div>
+              </div>
+
+              {/* 안내 메시지 (모든 상태 공통) */}
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 flex items-center justify-center">
+                <p className="text-blue-800 text-center">{guide.instruction}</p>
+              </div>
+
+              {/* ready 상태 전용 */}
+              {phase === 'ready' && (
+                <div className="flex flex-col gap-4">
+                  {/* 안내 텍스트 */}
+                  <div className="p-4 bg-[var(--neutral-50)] rounded-xl border border-[var(--neutral-200)]">
+                    <p className="text-[var(--neutral-600)] text-center text-sm">
+                      카메라에서 자신의 모습을 확인하고<br />
+                      준비가 되면 시작 버튼을 눌러주세요
+                    </p>
+                  </div>
+
+                  {/* 시작 버튼 */}
+                  <button
+                    onClick={handleStart}
+                    disabled={isLoading}
+                    className={`
+                      w-full px-6 py-4 rounded-xl font-bold text-lg
+                      bg-[var(--primary)] text-white
+                      hover:bg-[var(--primary-deep)] transition-all duration-200
+                      ${isLoading ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}
+                    `}
+                  >
+                    {isLoading ? '카메라 준비 중...' : '시작하기'}
+                  </button>
+                </div>
+              )}
+
+              {/* active 상태 전용 - 점수/진행도 */}
+              {phase === 'active' && (
+                <>
+                  {/* 실시간 점수 */}
+                  <div className="p-5 bg-white rounded-xl border-2 border-[var(--neutral-200)]">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-[var(--neutral-600)]">현재 점수</span>
+                      <span className={`text-3xl font-bold ${getScoreColor(realtimeScore)}`}>
+                        {realtimeScore}점
+                      </span>
+                    </div>
+                    {/* 진행도 바 */}
+                    <div className="mt-3">
+                      <div className="flex justify-between text-xs text-[var(--neutral-500)] mb-1">
+                        <span>진행도</span>
+                        <span>{Math.round(matchProgress)}%</span>
+                      </div>
+                      <div className="h-3 bg-[var(--neutral-200)] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[var(--primary)] transition-all duration-100"
+                          style={{ width: `${matchProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* active 상태: 피드백 및 감지 상태 (별도 행) */}
+            {phase === 'active' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                {/* 실시간 피드백 메시지 */}
+                {currentFeedback && (
+                  <div
+                    className={`p-4 rounded-xl text-center font-medium transition-all duration-200 ${
+                      currentFeedback.type === 'success'
+                        ? 'bg-green-50 text-green-700 border border-green-200'
+                        : currentFeedback.type === 'warning'
+                        ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                        : 'bg-blue-50 text-blue-700 border border-blue-200'
+                    }`}
+                  >
+                    {currentFeedback.message}
+                  </div>
+                )}
+
+                {/* 감지 상태 요약 */}
+                <div className="p-4 bg-[var(--neutral-50)] rounded-xl border border-[var(--neutral-200)]">
+                  <h4 className="text-sm font-medium text-[var(--neutral-700)] mb-3">감지 상태</h4>
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div className="text-center">
+                      <span className="block text-[var(--neutral-600)]">신체</span>
+                      <span className={`font-medium ${detectedKeypointsCount > 10 ? 'text-green-600' : 'text-yellow-600'}`}>
+                        {detectedKeypointsCount}/17
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <span className="block text-[var(--neutral-600)]">손</span>
+                      <span className={`font-medium ${detectedHandKeypointsCount > 0 ? 'text-orange-600' : 'text-[var(--neutral-400)]'}`}>
+                        {detectedHandKeypointsCount > 0 ? `${detectedHandKeypointsCount}/42` : '-'}
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <span className="block text-[var(--neutral-600)]">얼굴</span>
+                      <span className={`font-medium ${detectedFaceKeypointsCount > 0 ? 'text-pink-600' : 'text-[var(--neutral-400)]'}`}>
+                        {detectedFaceKeypointsCount > 0 ? 'O' : '-'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* hidden 비디오 요소 - result 상태에서 스트림 유지용 */}
+      {phase === 'result' && (
+        <div className="fixed left-[-9999px] top-[-9999px]">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-[640px] h-[480px]"
+          />
+          <canvas ref={canvasRef} className="w-[640px] h-[480px]" />
+        </div>
+      )}
+
+      {/* Result 상태 */}
+      {phase === 'result' && currentScore !== null && (
+        <div className="p-6 bg-[var(--neutral-50)] rounded-xl border-2 border-[var(--neutral-200)]">
           <div className="text-center py-4">
+            <span className="text-5xl mb-4 block">{guide.icon}</span>
             <div className="mb-4">
               <div className={`text-6xl font-bold ${getScoreColor(currentScore)}`}>
                 {currentScore}점
@@ -904,14 +996,14 @@ export default function MovementTraining({
                 onClick={handleNext}
                 className="px-6 py-3 rounded-xl font-medium text-lg
                   bg-[var(--primary)] text-white
-                  hover:bg-[var(--primary-dark)] transition-all duration-200 active:scale-95"
+                  hover:bg-[var(--primary-deep)] transition-all duration-200 active:scale-95"
               >
                 {currentIndex < selectedMovements.length - 1 ? '다음 동작' : '완료'}
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

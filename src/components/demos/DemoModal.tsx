@@ -6,8 +6,10 @@ import MemoryGameDemo from './MemoryGameDemo';
 import CalculationDemo from './CalculationDemo';
 import LanguageDemo from './LanguageDemo';
 import ReminiscenceDemo from './ReminiscenceDemo';
+import VoiceDemo from './VoiceDemo';
+import MovementDemo from './MovementDemo';
 
-export type DemoType = 'assessment' | 'memory' | 'calculation' | 'language' | 'reminiscence';
+export type DemoType = 'assessment' | 'memory' | 'calculation' | 'language' | 'reminiscence' | 'voice' | 'movement';
 
 interface DemoModalProps {
   type: DemoType;
@@ -20,6 +22,8 @@ const DEMO_TITLES: Record<DemoType, string> = {
   calculation: '계산력 게임 체험',
   language: '언어력 게임 체험',
   reminiscence: '회상 대화 체험',
+  voice: '음성 훈련 체험',
+  movement: '동작 훈련 체험',
 };
 
 export default function DemoModal({ type, onClose }: DemoModalProps) {
@@ -35,6 +39,10 @@ export default function DemoModal({ type, onClose }: DemoModalProps) {
         return <LanguageDemo onClose={onClose} />;
       case 'reminiscence':
         return <ReminiscenceDemo onClose={onClose} />;
+      case 'voice':
+        return <VoiceDemo onClose={onClose} />;
+      case 'movement':
+        return <MovementDemo onClose={onClose} />;
       default:
         return null;
     }

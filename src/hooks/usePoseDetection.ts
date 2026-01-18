@@ -3,12 +3,28 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { initTensorFlow } from '@/lib/ai/tensorflow';
 import * as poseDetection from '@tensorflow-models/pose-detection';
+import * as handPoseDetection from '@tensorflow-models/hand-pose-detection';
+import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
 
 // 키포인트 타입
 export interface Keypoint {
   x: number;
   y: number;
   score?: number;
+  name?: string;
+}
+
+// 손 키포인트 타입
+export interface HandKeypoint {
+  x: number;
+  y: number;
+  name?: string;
+}
+
+// 얼굴 키포인트 타입
+export interface FaceKeypoint {
+  x: number;
+  y: number;
   name?: string;
 }
 
@@ -43,8 +59,12 @@ interface UsePoseDetectionOptions {
   enabled?: boolean;
   detectionInterval?: number;
   tiltThreshold?: number; // 기울기 임계값 (도)
+  enableHandDetection?: boolean; // 손 감지 활성화
+  enableFaceDetection?: boolean; // 얼굴 감지 활성화
   onPostureChange?: (posture: PostureType, angle: number) => void;
   onKeypointsDetected?: (keypoints: Keypoint[]) => void;
+  onHandsDetected?: (hands: { left: HandKeypoint[]; right: HandKeypoint[] }) => void;
+  onFaceDetected?: (faceKeypoints: FaceKeypoint[]) => void;
 }
 
 // 훅 반환 타입
@@ -56,6 +76,9 @@ interface UsePoseDetectionReturn {
   postureTimeline: PostureRecord[];
   postureStats: PostureStats;
   keypoints: Keypoint[];
+  leftHandKeypoints: HandKeypoint[];
+  rightHandKeypoints: HandKeypoint[];
+  faceKeypoints: FaceKeypoint[];
   videoRef: React.RefObject<HTMLVideoElement | null>;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   startDetection: () => Promise<boolean>;
@@ -86,13 +109,68 @@ const SKELETON_CONNECTIONS: [number, number][] = [
   [12, 14], [14, 16],       // right leg
 ];
 
+// 손 스켈레톤 연결 정의 (21개 키포인트)
+const HAND_CONNECTIONS: [number, number][] = [
+  [0, 1], [1, 2], [2, 3], [3, 4],       // thumb
+  [0, 5], [5, 6], [6, 7], [7, 8],       // index finger
+  [0, 9], [9, 10], [10, 11], [11, 12],  // middle finger
+  [0, 13], [13, 14], [14, 15], [15, 16], // ring finger
+  [0, 17], [17, 18], [18, 19], [19, 20], // pinky
+  [5, 9], [9, 13], [13, 17],            // palm
+];
+
+// 얼굴 윤곽선 인덱스 (MediaPipe FaceMesh 468 포인트 중 주요 윤곽)
+const FACE_OVAL_INDICES = [
+  10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
+  397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+  172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109
+];
+
+// 입술 외곽선 인덱스
+const LIPS_OUTER_INDICES = [
+  61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185
+];
+
+// 왼쪽 눈 인덱스
+const LEFT_EYE_INDICES = [
+  263, 249, 390, 373, 374, 380, 381, 382, 362, 466, 388, 387, 386, 385, 384, 398
+];
+
+// 오른쪽 눈 인덱스
+const RIGHT_EYE_INDICES = [
+  33, 7, 163, 144, 145, 153, 154, 155, 133, 246, 161, 160, 159, 158, 157, 173
+];
+
+// 왼쪽 눈썹 인덱스
+const LEFT_EYEBROW_INDICES = [276, 283, 282, 295, 300];
+
+// 오른쪽 눈썹 인덱스
+const RIGHT_EYEBROW_INDICES = [46, 53, 52, 65, 70];
+
+// 코 윤곽 인덱스 (코 중심선 및 콧날)
+const NOSE_BRIDGE_INDICES = [168, 6, 197, 195, 5];
+const NOSE_TIP_INDICES = [1, 2, 98, 327, 2];
+
+// 왼쪽 눈동자(iris) 인덱스
+const LEFT_IRIS_INDICES = [468, 469, 470, 471, 472];
+
+// 오른쪽 눈동자(iris) 인덱스
+const RIGHT_IRIS_INDICES = [473, 474, 475, 476, 477];
+
+// 상체 키포인트 인덱스 (0-12: 머리, 어깨, 팔꿈치, 손목, 엉덩이)
+const UPPER_BODY_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
 export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePoseDetectionReturn {
   const {
     enabled = true,
     detectionInterval = 100, // 더 빠른 감지를 위해 100ms로 변경
     tiltThreshold = 15,
+    enableHandDetection = true, // 기본값: 손 감지 활성화
+    enableFaceDetection = true, // 기본값: 얼굴 감지 활성화
     onPostureChange,
     onKeypointsDetected,
+    onHandsDetected,
+    onFaceDetected,
   } = options;
 
   const [isLoading, setIsLoading] = useState(false);
@@ -101,11 +179,16 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
   const [currentTiltAngle, setCurrentTiltAngle] = useState(0);
   const [postureTimeline, setPostureTimeline] = useState<PostureRecord[]>([]);
   const [keypoints, setKeypoints] = useState<Keypoint[]>([]);
+  const [leftHandKeypoints, setLeftHandKeypoints] = useState<HandKeypoint[]>([]);
+  const [rightHandKeypoints, setRightHandKeypoints] = useState<HandKeypoint[]>([]);
+  const [faceKeypoints, setFaceKeypoints] = useState<FaceKeypoint[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<poseDetection.PoseDetector | null>(null);
+  const handDetectorRef = useRef<handPoseDetection.HandDetector | null>(null);
+  const faceDetectorRef = useRef<faceLandmarksDetection.FaceLandmarksDetector | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const currentQuestionIndexRef = useRef<number>(0);
 
@@ -177,11 +260,203 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     }
   }, []);
 
+  // MediaPipe Hands 모델 초기화
+  const initHandDetector = useCallback(async (): Promise<boolean> => {
+    if (!enableHandDetection) return true;
+
+    try {
+      console.log('[PoseDetection] Initializing Hand detector...');
+
+      const detector = await handPoseDetection.createDetector(
+        handPoseDetection.SupportedModels.MediaPipeHands,
+        {
+          runtime: 'tfjs',
+          maxHands: 2,
+        }
+      );
+
+      handDetectorRef.current = detector;
+      console.log('[PoseDetection] Hand detector initialized');
+      return true;
+    } catch (error) {
+      console.error('[PoseDetection] Failed to initialize hand detector:', error);
+      return false;
+    }
+  }, [enableHandDetection]);
+
+  // MediaPipe FaceMesh 모델 초기화
+  const initFaceDetector = useCallback(async (): Promise<boolean> => {
+    if (!enableFaceDetection) return true;
+
+    try {
+      console.log('[PoseDetection] Initializing Face detector...');
+
+      const detector = await faceLandmarksDetection.createDetector(
+        faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh,
+        {
+          runtime: 'tfjs',
+          maxFaces: 1,
+          refineLandmarks: false,
+        }
+      );
+
+      faceDetectorRef.current = detector;
+      console.log('[PoseDetection] Face detector initialized');
+      return true;
+    } catch (error) {
+      console.error('[PoseDetection] Failed to initialize face detector:', error);
+      return false;
+    }
+  }, [enableFaceDetection]);
+
+  // 손 랜드마크 그리기
+  const drawHandLandmarks = useCallback((
+    ctx: CanvasRenderingContext2D,
+    handKeypoints: HandKeypoint[],
+    handedness: 'left' | 'right'
+  ) => {
+    if (handKeypoints.length === 0) return;
+
+    // 손 색상: 왼손 = 주황색, 오른손 = 청록색
+    const color = handedness === 'left' ? '#FF6B35' : '#00D4AA';
+
+    // 손 스켈레톤 그리기
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+
+    for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
+      const start = handKeypoints[startIdx];
+      const end = handKeypoints[endIdx];
+
+      if (start && end) {
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+      }
+    }
+
+    // 손 키포인트 그리기
+    for (const kp of handKeypoints) {
+      ctx.beginPath();
+      ctx.arc(kp.x, kp.y, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(kp.x, kp.y, 2, 0, 2 * Math.PI);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+    }
+  }, []);
+
+  // 얼굴 랜드마크 그리기 (윤곽선, 눈, 입술, 눈썹, 코, 눈동자)
+  const drawFaceLandmarks = useCallback((
+    ctx: CanvasRenderingContext2D,
+    faceKps: FaceKeypoint[]
+  ) => {
+    if (faceKps.length === 0) return;
+
+    // 연결선 그리기 함수
+    const drawContour = (indices: number[], color: string, close = true, lineWidth = 1.5) => {
+      if (indices.length < 2) return;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+
+      const firstKp = faceKps[indices[0]];
+      if (firstKp) {
+        ctx.moveTo(firstKp.x, firstKp.y);
+      }
+
+      for (let i = 1; i < indices.length; i++) {
+        const kp = faceKps[indices[i]];
+        if (kp) {
+          ctx.lineTo(kp.x, kp.y);
+        }
+      }
+
+      if (close) {
+        ctx.closePath();
+      }
+      ctx.stroke();
+    };
+
+    // 원 그리기 함수 (눈동자용)
+    const drawIris = (indices: number[], color: string) => {
+      if (indices.length === 0) return;
+
+      // 눈동자 중심점 계산
+      let centerX = 0;
+      let centerY = 0;
+      let count = 0;
+
+      for (const idx of indices) {
+        const kp = faceKps[idx];
+        if (kp) {
+          centerX += kp.x;
+          centerY += kp.y;
+          count++;
+        }
+      }
+
+      if (count > 0) {
+        centerX /= count;
+        centerY /= count;
+
+        // 눈동자 원 그리기
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        // 하이라이트
+        ctx.beginPath();
+        ctx.arc(centerX - 1, centerY - 1, 1.5, 0, 2 * Math.PI);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill();
+      }
+    };
+
+    // 얼굴 윤곽선 (하얀색)
+    drawContour(FACE_OVAL_INDICES, '#FFFFFF', true, 2);
+
+    // 왼쪽 눈 (하늘색)
+    drawContour(LEFT_EYE_INDICES, '#87CEEB', true, 2);
+
+    // 오른쪽 눈 (하늘색)
+    drawContour(RIGHT_EYE_INDICES, '#87CEEB', true, 2);
+
+    // 눈동자 (검은색 with 하이라이트) - refineLandmarks가 false여도 안전하게 처리
+    if (faceKps.length > 472) {
+      drawIris(LEFT_IRIS_INDICES, '#1a1a1a');
+    }
+    if (faceKps.length > 477) {
+      drawIris(RIGHT_IRIS_INDICES, '#1a1a1a');
+    }
+
+    // 입술 (핑크색) - 두께 증가
+    drawContour(LIPS_OUTER_INDICES, '#FFB6C1', true, 2);
+
+    // 왼쪽 눈썹 (연보라색)
+    drawContour(LEFT_EYEBROW_INDICES, '#DDA0DD', false, 2);
+
+    // 오른쪽 눈썹 (연보라색)
+    drawContour(RIGHT_EYEBROW_INDICES, '#DDA0DD', false, 2);
+
+    // 코 중심선 (연두색)
+    drawContour(NOSE_BRIDGE_INDICES, '#90EE90', false, 2);
+
+    // 코끝 (연두색)
+    drawContour(NOSE_TIP_INDICES, '#90EE90', false, 2);
+  }, []);
+
   // 키포인트를 캔버스에 그리기
   const drawKeypoints = useCallback(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video || keypoints.length === 0) return;
+    if (!canvas || !video) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -198,41 +473,65 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     ctx.scale(-1, 1);
     ctx.translate(-canvas.width, 0);
 
-    // 스켈레톤 그리기 (선)
-    ctx.strokeStyle = '#00FF00';
-    ctx.lineWidth = 3;
+    // 1. 신체 스켈레톤 그리기 (녹색) - 상체 강조
+    if (keypoints.length > 0) {
+      // 스켈레톤 연결선 그리기 (두께 증가: 3 → 4)
+      ctx.strokeStyle = '#00FF00';
+      ctx.lineWidth = 4;
 
-    for (const [startIdx, endIdx] of SKELETON_CONNECTIONS) {
-      const start = keypoints[startIdx];
-      const end = keypoints[endIdx];
+      for (const [startIdx, endIdx] of SKELETON_CONNECTIONS) {
+        const start = keypoints[startIdx];
+        const end = keypoints[endIdx];
 
-      if (start && end && (start.score || 0) > 0.3 && (end.score || 0) > 0.3) {
-        ctx.beginPath();
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
-        ctx.stroke();
+        if (start && end && (start.score || 0) > 0.3 && (end.score || 0) > 0.3) {
+          // 상체 연결선은 더 두껍게
+          const isUpperBodyConnection = UPPER_BODY_INDICES.includes(startIdx) && UPPER_BODY_INDICES.includes(endIdx);
+          ctx.lineWidth = isUpperBodyConnection ? 5 : 3;
+          ctx.globalAlpha = isUpperBodyConnection ? 1.0 : 0.6;
+
+          ctx.beginPath();
+          ctx.moveTo(start.x, start.y);
+          ctx.lineTo(end.x, end.y);
+          ctx.stroke();
+        }
       }
+      ctx.globalAlpha = 1.0;
+
+      // 신체 키포인트 그리기 (원) - 상체 강조
+      keypoints.forEach((kp, idx) => {
+        if ((kp.score || 0) > 0.3) {
+          const isUpperBody = UPPER_BODY_INDICES.includes(idx);
+          // 상체: 큰 원 (12/7), 하체: 작은 원 (7/4) + 반투명
+          const outerRadius = isUpperBody ? 12 : 7;
+          const innerRadius = isUpperBody ? 7 : 4;
+
+          ctx.globalAlpha = isUpperBody ? 1.0 : 0.5;
+
+          // 외곽 원 (녹색)
+          ctx.beginPath();
+          ctx.arc(kp.x, kp.y, outerRadius, 0, 2 * Math.PI);
+          ctx.fillStyle = '#00FF00';
+          ctx.fill();
+
+          // 내부 원 (흰색)
+          ctx.beginPath();
+          ctx.arc(kp.x, kp.y, innerRadius, 0, 2 * Math.PI);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fill();
+        }
+      });
+      ctx.globalAlpha = 1.0;
     }
 
-    // 키포인트 그리기 (원)
-    for (const kp of keypoints) {
-      if ((kp.score || 0) > 0.3) {
-        // 외곽선
-        ctx.beginPath();
-        ctx.arc(kp.x, kp.y, 8, 0, 2 * Math.PI);
-        ctx.fillStyle = '#00FF00';
-        ctx.fill();
+    // 2. 손 랜드마크 그리기
+    drawHandLandmarks(ctx, leftHandKeypoints, 'left');
+    drawHandLandmarks(ctx, rightHandKeypoints, 'right');
 
-        // 내부
-        ctx.beginPath();
-        ctx.arc(kp.x, kp.y, 5, 0, 2 * Math.PI);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fill();
-      }
-    }
+    // 3. 얼굴 랜드마크 그리기
+    drawFaceLandmarks(ctx, faceKeypoints);
 
     ctx.restore();
-  }, [keypoints]);
+  }, [keypoints, leftHandKeypoints, rightHandKeypoints, faceKeypoints, drawHandLandmarks, drawFaceLandmarks]);
 
   // 자세 분석 (실제 키포인트 기반)
   const analyzePostureFromKeypoints = useCallback((kps: Keypoint[]): { posture: PostureType; angle: number } => {
@@ -262,47 +561,111 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
 
   // 실시간 포즈 감지 루프
   const detectPose = useCallback(async () => {
-    if (!isActive || !videoRef.current || !detectorRef.current) {
+    if (!isActive || !videoRef.current) {
+      return;
+    }
+
+    // 비디오 dimension이 유효한지 검증 (texture size [0x0] 에러 방지)
+    const video = videoRef.current;
+    if (!video.videoWidth || !video.videoHeight || video.videoWidth === 0 || video.videoHeight === 0) {
+      // 비디오가 준비될 때까지 대기
+      if (isActive) {
+        animationFrameRef.current = requestAnimationFrame(detectPose);
+      }
       return;
     }
 
     try {
-      const poses = await detectorRef.current.estimatePoses(videoRef.current);
+      // 1. 신체 포즈 감지
+      if (detectorRef.current) {
+        const poses = await detectorRef.current.estimatePoses(videoRef.current);
 
-      if (poses.length > 0 && poses[0].keypoints) {
-        const detectedKeypoints = poses[0].keypoints.map((kp, idx) => ({
-          x: kp.x,
-          y: kp.y,
-          score: kp.score,
-          name: KEYPOINT_NAMES[idx],
-        }));
+        if (poses.length > 0 && poses[0].keypoints) {
+          const detectedKeypoints = poses[0].keypoints.map((kp, idx) => ({
+            x: kp.x,
+            y: kp.y,
+            score: kp.score,
+            name: KEYPOINT_NAMES[idx],
+          }));
 
-        setKeypoints(detectedKeypoints);
+          setKeypoints(detectedKeypoints);
 
-        // 콜백 호출
-        if (onKeypointsDetected) {
-          onKeypointsDetected(detectedKeypoints);
+          // 콜백 호출
+          if (onKeypointsDetected) {
+            onKeypointsDetected(detectedKeypoints);
+          }
+
+          // 자세 분석
+          const { posture, angle } = analyzePostureFromKeypoints(detectedKeypoints);
+
+          if (posture !== 'unknown') {
+            setCurrentPosture(posture);
+            setCurrentTiltAngle(angle);
+
+            // 타임라인에 기록
+            const record: PostureRecord = {
+              timestamp: Date.now(),
+              posture,
+              tiltAngle: angle,
+              questionIndex: currentQuestionIndexRef.current,
+            };
+            setPostureTimeline(prev => [...prev.slice(-100), record]); // 최근 100개만 유지
+
+            if (onPostureChange) {
+              onPostureChange(posture, angle);
+            }
+          }
+        }
+      }
+
+      // 2. 손 감지
+      if (handDetectorRef.current && enableHandDetection) {
+        const hands = await handDetectorRef.current.estimateHands(videoRef.current);
+
+        let leftHand: HandKeypoint[] = [];
+        let rightHand: HandKeypoint[] = [];
+
+        for (const hand of hands) {
+          const handKeypoints = hand.keypoints.map((kp) => ({
+            x: kp.x,
+            y: kp.y,
+            name: kp.name,
+          }));
+
+          // 카메라 미러링으로 인해 handedness가 반대로 감지됨
+          if (hand.handedness === 'Left') {
+            rightHand = handKeypoints;
+          } else {
+            leftHand = handKeypoints;
+          }
         }
 
-        // 자세 분석
-        const { posture, angle } = analyzePostureFromKeypoints(detectedKeypoints);
+        setLeftHandKeypoints(leftHand);
+        setRightHandKeypoints(rightHand);
 
-        if (posture !== 'unknown') {
-          setCurrentPosture(posture);
-          setCurrentTiltAngle(angle);
+        if (onHandsDetected) {
+          onHandsDetected({ left: leftHand, right: rightHand });
+        }
+      }
 
-          // 타임라인에 기록
-          const record: PostureRecord = {
-            timestamp: Date.now(),
-            posture,
-            tiltAngle: angle,
-            questionIndex: currentQuestionIndexRef.current,
-          };
-          setPostureTimeline(prev => [...prev.slice(-100), record]); // 최근 100개만 유지
+      // 3. 얼굴 감지
+      if (faceDetectorRef.current && enableFaceDetection) {
+        const faces = await faceDetectorRef.current.estimateFaces(videoRef.current);
 
-          if (onPostureChange) {
-            onPostureChange(posture, angle);
+        if (faces.length > 0 && faces[0].keypoints) {
+          const detectedFaceKeypoints = faces[0].keypoints.map((kp) => ({
+            x: kp.x,
+            y: kp.y,
+            name: kp.name,
+          }));
+
+          setFaceKeypoints(detectedFaceKeypoints);
+
+          if (onFaceDetected) {
+            onFaceDetected(detectedFaceKeypoints);
           }
+        } else {
+          setFaceKeypoints([]);
         }
       }
     } catch (error) {
@@ -313,14 +676,14 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     if (isActive) {
       animationFrameRef.current = requestAnimationFrame(detectPose);
     }
-  }, [isActive, analyzePostureFromKeypoints, onKeypointsDetected, onPostureChange]);
+  }, [isActive, enableHandDetection, enableFaceDetection, analyzePostureFromKeypoints, onKeypointsDetected, onPostureChange, onHandsDetected, onFaceDetected]);
 
   // 키포인트 변경 시 캔버스에 그리기
   useEffect(() => {
-    if (keypoints.length > 0) {
+    if (keypoints.length > 0 || leftHandKeypoints.length > 0 || rightHandKeypoints.length > 0 || faceKeypoints.length > 0) {
       drawKeypoints();
     }
-  }, [keypoints, drawKeypoints]);
+  }, [keypoints, leftHandKeypoints, rightHandKeypoints, faceKeypoints, drawKeypoints]);
 
   // 감지 시작
   const startDetection = useCallback(async (): Promise<boolean> => {
@@ -337,23 +700,48 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
         return false;
       }
 
-      // 비디오가 로드될 때까지 대기
-      await new Promise<void>((resolve) => {
-        if (videoRef.current) {
-          if (videoRef.current.readyState >= 2) {
+      // 비디오가 로드되고 dimension이 유효할 때까지 대기
+      await new Promise<void>((resolve, reject) => {
+        if (!videoRef.current) {
+          resolve();
+          return;
+        }
+
+        const checkReady = () => {
+          if (videoRef.current &&
+              videoRef.current.readyState >= 2 &&
+              videoRef.current.videoWidth > 0 &&
+              videoRef.current.videoHeight > 0) {
             resolve();
           } else {
-            videoRef.current.onloadeddata = () => resolve();
+            requestAnimationFrame(checkReady);
           }
-        } else {
+        };
+
+        checkReady();
+
+        // 타임아웃 추가 (10초)
+        setTimeout(() => {
+          console.warn('[PoseDetection] Video initialization timeout, proceeding anyway');
           resolve();
-        }
+        }, 10000);
       });
 
-      // MoveNet 초기화
-      const detectorInitialized = await initDetector();
-      if (!detectorInitialized) {
-        console.warn('[PoseDetection] Using simulation mode');
+      // 모든 감지기 초기화 (병렬 실행)
+      const [poseInitialized, handInitialized, faceInitialized] = await Promise.all([
+        initDetector(),
+        initHandDetector(),
+        initFaceDetector(),
+      ]);
+
+      if (!poseInitialized) {
+        console.warn('[PoseDetection] Pose detector using simulation mode');
+      }
+      if (!handInitialized) {
+        console.warn('[PoseDetection] Hand detector failed to initialize');
+      }
+      if (!faceInitialized) {
+        console.warn('[PoseDetection] Face detector failed to initialize');
       }
 
       setIsActive(true);
@@ -368,7 +756,7 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
       setIsLoading(false);
       return false;
     }
-  }, [startWebcam, initDetector, detectPose]);
+  }, [startWebcam, initDetector, initHandDetector, initFaceDetector, detectPose]);
 
   // 감지 중지
   const stopDetection = useCallback(() => {
@@ -379,13 +767,25 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
       animationFrameRef.current = null;
     }
 
+    // 모든 감지기 정리
     if (detectorRef.current) {
       detectorRef.current.dispose();
       detectorRef.current = null;
     }
+    if (handDetectorRef.current) {
+      handDetectorRef.current.dispose();
+      handDetectorRef.current = null;
+    }
+    if (faceDetectorRef.current) {
+      faceDetectorRef.current.dispose();
+      faceDetectorRef.current = null;
+    }
 
     stopWebcam();
     setKeypoints([]);
+    setLeftHandKeypoints([]);
+    setRightHandKeypoints([]);
+    setFaceKeypoints([]);
   }, [stopWebcam]);
 
   // 타임라인 초기화
@@ -406,6 +806,12 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
       }
       if (detectorRef.current) {
         detectorRef.current.dispose();
+      }
+      if (handDetectorRef.current) {
+        handDetectorRef.current.dispose();
+      }
+      if (faceDetectorRef.current) {
+        faceDetectorRef.current.dispose();
       }
       stopWebcam();
     };
@@ -432,6 +838,9 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     postureTimeline,
     postureStats,
     keypoints,
+    leftHandKeypoints,
+    rightHandKeypoints,
+    faceKeypoints,
     videoRef,
     canvasRef,
     startDetection,

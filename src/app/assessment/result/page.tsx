@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAssessmentStore } from '@/store/assessmentStore';
 import { useSessionStore } from '@/store/sessionStore';
 import {
@@ -74,8 +74,76 @@ interface BehaviorDataType {
   contentInterests?: Array<{ region: string; hoverTime: number; clickCount: number; percentage: number }>;
 }
 
-export default function AssessmentResultPage() {
+// DB 데이터를 결과 페이지 형식으로 변환하는 함수
+interface TransformedResult {
+  totalScore: number;
+  maxScore: number;
+  percentage: number;
+  riskLevel: 'normal' | 'mild_caution' | 'mci_suspected' | 'consultation_recommended';
+  categoryScores: Array<{
+    category: CognitiveCategory;
+    name: string;
+    score: number;
+    maxScore: number;
+    percentage: number;
+    questionsCorrect: number;
+    questionsTotal: number;
+    averageResponseTime: number;
+  }>;
+  completedAt: number;
+  duration: number;
+}
+
+function transformDbData(assessment: {
+  totalScore?: number | null;
+  memoryScore?: number | null;
+  calculationScore?: number | null;
+  languageScore?: number | null;
+  attentionScore?: number | null;
+  executiveScore?: number | null;
+  visuospatialScore?: number | null;
+  riskLevel?: string | null;
+  createdAt: Date | string;
+  behaviorData?: string | null;
+}): TransformedResult {
+  const totalMaxScore = 100;
+
+  const categoryScores: TransformedResult['categoryScores'] = [
+    { category: 'memory' as CognitiveCategory, name: '기억력', score: assessment.memoryScore || 0, maxScore: 20 },
+    { category: 'calculation' as CognitiveCategory, name: '계산력', score: assessment.calculationScore || 0, maxScore: 15 },
+    { category: 'language' as CognitiveCategory, name: '언어력', score: assessment.languageScore || 0, maxScore: 20 },
+    { category: 'attention' as CognitiveCategory, name: '주의력', score: assessment.attentionScore || 0, maxScore: 15 },
+    { category: 'executive' as CognitiveCategory, name: '실행기능', score: assessment.executiveScore || 0, maxScore: 15 },
+    { category: 'visuospatial' as CognitiveCategory, name: '시공간력', score: assessment.visuospatialScore || 0, maxScore: 15 },
+  ].map(cs => ({
+    ...cs,
+    percentage: cs.maxScore > 0 ? Math.round((cs.score / cs.maxScore) * 100) : 0,
+    questionsCorrect: 0,
+    questionsTotal: 0,
+    averageResponseTime: 0,
+  }));
+
+  const validRiskLevels = ['normal', 'mild_caution', 'mci_suspected', 'consultation_recommended'] as const;
+  const riskLevel = validRiskLevels.includes(assessment.riskLevel as typeof validRiskLevels[number])
+    ? (assessment.riskLevel as TransformedResult['riskLevel'])
+    : 'normal';
+
+  return {
+    totalScore: assessment.totalScore || 0,
+    maxScore: totalMaxScore,
+    percentage: assessment.totalScore || 0,
+    riskLevel,
+    categoryScores,
+    completedAt: new Date(assessment.createdAt).getTime(),
+    duration: 0,
+  };
+}
+
+function AssessmentResultContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const recordId = searchParams.get('id');
+
   const { session } = useSessionStore();
   const sessionId = session?.id;
   const { responses, startTime, isCompleted, resetAssessment, behaviorData: storeBehaviorData } = useAssessmentStore();
@@ -84,19 +152,71 @@ export default function AssessmentResultPage() {
   const [showBehaviorSection, setShowBehaviorSection] = useState(true);
   const hasSavedRef = useRef(false);
 
-  // 세션 없으면 홈으로
+  // DB 결과 로딩 상태
+  const [dbResult, setDbResult] = useState<TransformedResult | null>(null);
+  const [dbBehaviorData, setDbBehaviorData] = useState<BehaviorDataType | null>(null);
+  const [isLoadingDb, setIsLoadingDb] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+
+  // DB에서 결과 가져오기 (id가 있을 때)
   useEffect(() => {
-    if (!session) {
+    if (recordId) {
+      setIsLoadingDb(true);
+      setDbError(null);
+      fetch(`/api/assessment/${recordId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setDbResult(transformDbData(data.data));
+            // DB에서 behaviorData 파싱
+            if (data.data.behaviorData) {
+              try {
+                const parsed = typeof data.data.behaviorData === 'string'
+                  ? JSON.parse(data.data.behaviorData)
+                  : data.data.behaviorData;
+                setDbBehaviorData({
+                  responseTime: parsed.responseTime || [],
+                  hesitationCount: parsed.hesitationCount || 0,
+                  correctionCount: parsed.correctionCount || 0,
+                  avgResponseTime: parsed.avgResponseTime || 0,
+                  maxResponseTime: parsed.maxResponseTime,
+                  minResponseTime: parsed.minResponseTime,
+                  responseTimeVariance: parsed.responseTimeVariance,
+                  emotionTimeline: parsed.emotionTimeline || [],
+                  emotionDistribution: parsed.emotionDistribution || [],
+                  dominantEmotion: parsed.dominantEmotion,
+                  postureTimeline: parsed.postureTimeline || [],
+                  postureStats: parsed.postureStats,
+                  mouseHeatmap: parsed.mouseHeatmap || [],
+                  contentInterests: parsed.contentInterests || [],
+                });
+              } catch (e) {
+                console.error('Failed to parse behaviorData:', e);
+              }
+            }
+          } else {
+            setDbError(data.error?.message || '결과를 불러올 수 없습니다.');
+          }
+        })
+        .catch(() => setDbError('서버 연결에 실패했습니다.'))
+        .finally(() => setIsLoadingDb(false));
+    }
+  }, [recordId]);
+
+  // 세션 없으면 홈으로 (단, recordId가 있으면 DB 결과 표시 가능)
+  useEffect(() => {
+    if (!session && !recordId) {
       router.push('/');
     }
-  }, [session, router]);
+  }, [session, recordId, router]);
 
-  // 결과가 없으면 진단 페이지로
+  // 결과가 없으면 진단 페이지로 (단, recordId가 있으면 DB 결과를 기다림)
   useEffect(() => {
+    if (recordId) return; // id가 있으면 DB 결과를 기다림
     if (!isCompleted || responses.length === 0) {
       router.push('/assessment');
     }
-  }, [isCompleted, responses.length, router]);
+  }, [recordId, isCompleted, responses.length, router]);
 
   // 결과 계산
   const result = useMemo(() => {
@@ -141,17 +261,30 @@ export default function AssessmentResultPage() {
     };
   }, [responses, storeBehaviorData]);
 
-  // 응답 시간 차트 데이터
+  // 응답 시간 차트 데이터 (로컬 또는 DB에서)
   const responseTimeChartData = useMemo(() => {
-    if (!responses || responses.length === 0) return [];
+    // 로컬 responses가 있으면 사용
+    if (responses && responses.length > 0) {
+      return responses.map((r, index) => ({
+        questionIndex: index,
+        responseTime: r.responseTime,
+        isCorrect: r.isCorrect,
+        category: r.questionId.split('-')[0],
+      }));
+    }
 
-    return responses.map((r, index) => ({
-      questionIndex: index,
-      responseTime: r.responseTime,
-      isCorrect: r.isCorrect,
-      category: r.questionId.split('-')[0],
-    }));
-  }, [responses]);
+    // DB에서 로드된 behaviorData의 responseTime 배열 사용
+    if (dbBehaviorData?.responseTime && dbBehaviorData.responseTime.length > 0) {
+      return dbBehaviorData.responseTime.map((time, index) => ({
+        questionIndex: index,
+        responseTime: time,
+        isCorrect: undefined, // DB에서는 정답 여부 정보가 없을 수 있음
+        category: 'unknown',
+      }));
+    }
+
+    return [];
+  }, [responses, dbBehaviorData]);
 
   // 결과 서버에 저장 (한 번만 실행)
   useEffect(() => {
@@ -194,7 +327,66 @@ export default function AssessmentResultPage() {
     }
   }, [result, sessionId, behaviorData]);
 
-  if (!result) {
+  // 최종 결과 데이터 (DB 결과 우선)
+  const displayResult = dbResult || result;
+
+  // 최종 행동 데이터 (DB 데이터 우선)
+  const displayBehaviorData = dbBehaviorData || behaviorData;
+
+  // DB 로딩 중
+  if (isLoadingDb) {
+    return (
+      <div className="min-h-screen bg-[var(--neutral-50)] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-[var(--primary)] border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-[var(--neutral-600)]">결과를 불러오고 있습니다...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // DB 에러
+  if (dbError) {
+    return (
+      <div className="min-h-screen bg-[var(--neutral-50)] flex items-center justify-center">
+        <div className="text-center max-w-md px-4">
+          <div className="text-5xl mb-4">⚠️</div>
+          <h2 className="text-xl font-bold text-[var(--neutral-800)] mb-2">결과를 불러올 수 없습니다</h2>
+          <p className="text-[var(--neutral-600)] mb-6">{dbError}</p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => {
+                setDbError(null);
+                setIsLoadingDb(true);
+                fetch(`/api/assessment/${recordId}`)
+                  .then(res => res.json())
+                  .then(data => {
+                    if (data.success) {
+                      setDbResult(transformDbData(data.data));
+                    } else {
+                      setDbError(data.error?.message || '결과를 불러올 수 없습니다.');
+                    }
+                  })
+                  .catch(() => setDbError('서버 연결에 실패했습니다.'))
+                  .finally(() => setIsLoadingDb(false));
+              }}
+              className="px-6 py-3 bg-[var(--primary)] text-white rounded-xl font-medium hover:bg-[var(--primary-deep)] transition-colors"
+            >
+              다시 시도
+            </button>
+            <button
+              onClick={() => router.push('/assessment')}
+              className="px-6 py-3 border border-[var(--neutral-300)] text-[var(--neutral-700)] rounded-xl font-medium hover:bg-[var(--neutral-100)] transition-colors"
+            >
+              진단 페이지로 돌아가기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!displayResult) {
     return (
       <div className="min-h-screen bg-[var(--neutral-50)] flex items-center justify-center">
         <div className="text-center">
@@ -205,10 +397,10 @@ export default function AssessmentResultPage() {
     );
   }
 
-  const riskConfig = riskLevelConfig[result.riskLevel];
-  const weakAreas = analyzeWeakAreas(result.categoryScores);
-  const strongAreas = analyzeStrongAreas(result.categoryScores);
-  const recommendations = getTrainingRecommendations(result.categoryScores);
+  const riskConfig = riskLevelConfig[displayResult.riskLevel];
+  const weakAreas = analyzeWeakAreas(displayResult.categoryScores);
+  const strongAreas = analyzeStrongAreas(displayResult.categoryScores);
+  const recommendations = getTrainingRecommendations(displayResult.categoryScores);
 
   // 위험도별 색상
   const riskColors = {
@@ -227,7 +419,7 @@ export default function AssessmentResultPage() {
             평가 결과
           </h1>
           <p className="text-[var(--neutral-600)]">
-            {new Date(result.completedAt).toLocaleDateString('ko-KR', {
+            {new Date(displayResult.completedAt).toLocaleDateString('ko-KR', {
               year: 'numeric',
               month: 'long',
               day: 'numeric',
@@ -241,29 +433,29 @@ export default function AssessmentResultPage() {
             {/* 점수 */}
             <div className="mb-4">
               <span className="text-6xl font-bold text-[var(--primary)]">
-                {result.totalScore}
+                {displayResult.totalScore}
               </span>
               <span className="text-2xl text-[var(--neutral-400)]">
-                / {result.maxScore}
+                / {displayResult.maxScore}
               </span>
             </div>
 
             {/* 퍼센트 */}
             <div className="mb-6">
               <span className="text-xl text-[var(--neutral-600)]">
-                {result.percentage}점
+                {displayResult.percentage}점
               </span>
             </div>
 
             {/* 위험도 배지 */}
             <div
-              className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-lg font-semibold ${riskColors[result.riskLevel]}`}
+              className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-lg font-semibold ${riskColors[displayResult.riskLevel]}`}
             >
               <span className="text-2xl">
-                {result.riskLevel === 'normal' && '✓'}
-                {result.riskLevel === 'mild_caution' && '⚠'}
-                {result.riskLevel === 'mci_suspected' && '⚠'}
-                {result.riskLevel === 'consultation_recommended' && '!'}
+                {displayResult.riskLevel === 'normal' && '✓'}
+                {displayResult.riskLevel === 'mild_caution' && '⚠'}
+                {displayResult.riskLevel === 'mci_suspected' && '⚠'}
+                {displayResult.riskLevel === 'consultation_recommended' && '!'}
               </span>
               {riskConfig.label}
             </div>
@@ -283,7 +475,7 @@ export default function AssessmentResultPage() {
           />
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 py-4">
-              {result.categoryScores.map((cs) => {
+              {displayResult.categoryScores.map((cs) => {
                 const config = categoryConfig[cs.category];
                 const bgColor =
                   cs.percentage >= 85
@@ -318,7 +510,7 @@ export default function AssessmentResultPage() {
           <CardHeader title="영역별 점수" subtitle="6개 인지 기능 영역 분석" />
           <CardContent>
             <div className="space-y-4">
-              {result.categoryScores.map((cs) => {
+              {displayResult.categoryScores.map((cs) => {
                 const config = categoryConfig[cs.category];
                 const barColor =
                   cs.percentage >= 85
@@ -373,7 +565,7 @@ export default function AssessmentResultPage() {
           <Card variant="bordered" padding="md">
             <CardHeader
               title="강점 영역"
-              subtitle={strongAreas.length > 0 ? '우수한 인지 기능' : ''}
+              subtitle={strongAreas.length > 0 ? '우수한 인지 기능' : '발전 가능성'}
             />
             <CardContent>
               {strongAreas.length > 0 ? (
@@ -394,9 +586,37 @@ export default function AssessmentResultPage() {
                   })}
                 </div>
               ) : (
-                <p className="text-[var(--neutral-500)] text-sm">
-                  모든 영역에서 향상의 여지가 있습니다.
-                </p>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-3 bg-[var(--primary)]/5 rounded-lg">
+                    <span className="text-2xl">🌱</span>
+                    <div>
+                      <p className="font-medium text-[var(--primary)]">성장 잠재력</p>
+                      <p className="text-xs text-[var(--neutral-500)]">꾸준한 훈련으로 모든 영역을 발전시킬 수 있습니다</p>
+                    </div>
+                  </div>
+                  <div className="text-center py-2">
+                    <p className="text-sm text-[var(--neutral-600)]">
+                      현재는 두드러진 강점 영역이 없지만,
+                    </p>
+                    <p className="text-sm text-[var(--neutral-600)]">
+                      <span className="font-semibold text-[var(--primary)]">맞춤 훈련</span>을 통해 인지 기능을 향상시킬 수 있습니다.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-2">
+                    <div className="text-center p-2 bg-[var(--neutral-50)] rounded-lg">
+                      <span className="text-lg">📚</span>
+                      <p className="text-[10px] text-[var(--neutral-500)] mt-1">꾸준한 학습</p>
+                    </div>
+                    <div className="text-center p-2 bg-[var(--neutral-50)] rounded-lg">
+                      <span className="text-lg">🎯</span>
+                      <p className="text-[10px] text-[var(--neutral-500)] mt-1">목표 설정</p>
+                    </div>
+                    <div className="text-center p-2 bg-[var(--neutral-50)] rounded-lg">
+                      <span className="text-lg">💪</span>
+                      <p className="text-[10px] text-[var(--neutral-500)] mt-1">반복 훈련</p>
+                    </div>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -505,17 +725,17 @@ export default function AssessmentResultPage() {
         </div>
 
         {/* 행동 분석 상세 섹션 */}
-        {showBehaviorSection && behaviorData && (
+        {showBehaviorSection && displayBehaviorData && (
           <div className="space-y-6 mb-6">
             {/* 행동 지표 카드 */}
             <BehaviorMetrics
               data={{
-                hesitationCount: behaviorData.hesitationCount,
-                correctionCount: behaviorData.correctionCount,
-                avgResponseTime: behaviorData.avgResponseTime,
-                maxResponseTime: behaviorData.maxResponseTime,
-                minResponseTime: behaviorData.minResponseTime,
-                responseTimeVariance: behaviorData.responseTimeVariance,
+                hesitationCount: displayBehaviorData.hesitationCount,
+                correctionCount: displayBehaviorData.correctionCount,
+                avgResponseTime: displayBehaviorData.avgResponseTime,
+                maxResponseTime: displayBehaviorData.maxResponseTime,
+                minResponseTime: displayBehaviorData.minResponseTime,
+                responseTimeVariance: displayBehaviorData.responseTimeVariance,
               }}
               className="border border-[var(--neutral-200)]"
             />
@@ -527,8 +747,8 @@ export default function AssessmentResultPage() {
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {responseTimeChartData.map((item, i) => {
                     const timeInSec = (item.responseTime / 1000).toFixed(1);
-                    const avgInSec = behaviorData.avgResponseTime / 1000;
-                    const isAboveAvg = item.responseTime > behaviorData.avgResponseTime;
+                    const avgInSec = displayBehaviorData.avgResponseTime / 1000;
+                    const isAboveAvg = item.responseTime > displayBehaviorData.avgResponseTime;
                     return (
                       <div key={i} className="flex items-center gap-3">
                         <span className="text-sm text-[var(--neutral-500)] w-16">문항 {item.questionIndex + 1}</span>
@@ -548,62 +768,111 @@ export default function AssessmentResultPage() {
                 </div>
                 <div className="mt-4 pt-3 border-t border-[var(--neutral-200)] flex items-center justify-between">
                   <span className="text-sm text-[var(--neutral-500)]">평균 응답 시간</span>
-                  <span className="font-semibold text-[var(--neutral-700)]">{(behaviorData.avgResponseTime / 1000).toFixed(1)}초</span>
+                  <span className="font-semibold text-[var(--neutral-700)]">{(displayBehaviorData.avgResponseTime / 1000).toFixed(1)}초</span>
                 </div>
               </Card>
             )}
 
             {/* 감정 분포 (데이터가 있는 경우) */}
-            {behaviorData.emotionDistribution && behaviorData.emotionDistribution.length > 0 && (
+            {displayBehaviorData.emotionDistribution && displayBehaviorData.emotionDistribution.length > 0 && (
               <Card variant="bordered" padding="md">
                 <h3 className="text-lg font-semibold text-[var(--neutral-800)] mb-4">😊 감정/표정 분포</h3>
+
+                {/* 주요 감정 요약 */}
+                <div className="flex items-center gap-4 mb-5 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl">
+                  <div className="text-center">
+                    <span className="text-4xl block mb-1">
+                      {displayBehaviorData.dominantEmotion === 'happy' ? '😊' :
+                       displayBehaviorData.dominantEmotion === 'neutral' ? '😐' :
+                       displayBehaviorData.dominantEmotion === 'confused' ? '😕' :
+                       displayBehaviorData.dominantEmotion === 'anxious' ? '😰' :
+                       displayBehaviorData.dominantEmotion === 'sad' ? '😢' :
+                       displayBehaviorData.dominantEmotion === 'surprised' ? '😮' : '😐'}
+                    </span>
+                    <span className="text-xs text-[var(--neutral-500)]">주요 감정</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-[var(--neutral-800)]">
+                      {displayBehaviorData.dominantEmotion === 'happy' ? '긍정적이고 편안한 상태' :
+                       displayBehaviorData.dominantEmotion === 'neutral' ? '차분하고 집중된 상태' :
+                       displayBehaviorData.dominantEmotion === 'confused' ? '문항에 대해 고민하는 모습' :
+                       displayBehaviorData.dominantEmotion === 'anxious' ? '약간의 긴장감이 관찰됨' :
+                       displayBehaviorData.dominantEmotion === 'sad' ? '어려움을 느끼는 모습' :
+                       displayBehaviorData.dominantEmotion === 'surprised' ? '새로운 문항에 대한 반응' : '평온한 상태'}
+                    </p>
+                    <p className="text-sm text-[var(--neutral-500)] mt-1">
+                      평가 중 {displayBehaviorData.emotionDistribution[0]?.percentage || 0}%의 시간 동안 관찰됨
+                    </p>
+                  </div>
+                </div>
+
+                {/* 감정 분포 바 차트 */}
                 <div className="space-y-3">
-                  {behaviorData.emotionDistribution.map((item, i) => {
-                    const emotionEmoji: Record<string, string> = {
-                      happy: '😊', sad: '😢', angry: '😠', surprised: '😲',
-                      neutral: '😐', fearful: '😨', disgusted: '🤢'
+                  {displayBehaviorData.emotionDistribution.map((item, i) => {
+                    const emotionConfig: Record<string, { emoji: string; label: string; color: string; bgColor: string }> = {
+                      happy: { emoji: '😊', label: '행복/만족', color: 'bg-green-400', bgColor: 'bg-green-50' },
+                      neutral: { emoji: '😐', label: '중립/집중', color: 'bg-gray-400', bgColor: 'bg-gray-50' },
+                      confused: { emoji: '😕', label: '혼란/당황', color: 'bg-yellow-400', bgColor: 'bg-yellow-50' },
+                      anxious: { emoji: '😰', label: '불안/긴장', color: 'bg-orange-400', bgColor: 'bg-orange-50' },
+                      sad: { emoji: '😢', label: '슬픔/어려움', color: 'bg-blue-400', bgColor: 'bg-blue-50' },
+                      surprised: { emoji: '😮', label: '놀람', color: 'bg-purple-400', bgColor: 'bg-purple-50' },
+                      angry: { emoji: '😠', label: '화남', color: 'bg-red-400', bgColor: 'bg-red-50' },
                     };
-                    const emotionLabel: Record<string, string> = {
-                      happy: '행복', sad: '슬픔', angry: '화남', surprised: '놀람',
-                      neutral: '중립', fearful: '두려움', disgusted: '혐오'
-                    };
+                    const config = emotionConfig[item.emotion] || { emoji: '😐', label: item.emotion, color: 'bg-gray-400', bgColor: 'bg-gray-50' };
+
                     return (
-                      <div key={i} className="flex items-center gap-3">
-                        <span className="text-2xl w-8">{emotionEmoji[item.emotion] || '😐'}</span>
-                        <span className="text-sm text-[var(--neutral-600)] w-16">{emotionLabel[item.emotion] || item.emotion}</span>
-                        <div className="flex-1 h-4 bg-[var(--neutral-100)] rounded-full overflow-hidden">
+                      <div key={i} className={`flex items-center gap-3 p-2 ${config.bgColor} rounded-lg`}>
+                        <span className="text-2xl w-8">{config.emoji}</span>
+                        <span className="text-sm text-[var(--neutral-700)] w-20 font-medium">{config.label}</span>
+                        <div className="flex-1 h-4 bg-white/60 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-purple-400 rounded-full"
+                            className={`h-full ${config.color} rounded-full transition-all duration-500`}
                             style={{ width: `${item.percentage}%` }}
                           />
                         </div>
-                        <span className="text-sm font-medium text-[var(--neutral-700)] w-12 text-right">{item.percentage}%</span>
+                        <span className="text-sm font-bold text-[var(--neutral-800)] w-14 text-right">{item.percentage}%</span>
                       </div>
                     );
                   })}
+                </div>
+
+                {/* 감정 해석 안내 */}
+                <div className="mt-4 pt-4 border-t border-[var(--neutral-200)]">
+                  <p className="text-xs text-[var(--neutral-500)] flex items-start gap-2">
+                    <span className="text-sm">💡</span>
+                    <span>
+                      {displayBehaviorData.emotionDistribution.some(e => e.emotion === 'happy' && e.percentage > 20)
+                        ? '긍정적인 감정이 많이 관찰되어 평가 환경이 좋았습니다.'
+                        : displayBehaviorData.emotionDistribution.some(e => e.emotion === 'confused' && e.percentage > 40)
+                        ? '혼란스러운 표정이 자주 관찰되었습니다. 어려운 문항이 있었을 수 있습니다.'
+                        : displayBehaviorData.emotionDistribution.some(e => e.emotion === 'anxious' && e.percentage > 30)
+                        ? '긴장감이 관찰되었습니다. 편안한 환경에서 재평가를 권장합니다.'
+                        : '다양한 감정이 관찰되었습니다. 이는 정상적인 평가 반응입니다.'}
+                    </span>
+                  </p>
                 </div>
               </Card>
             )}
 
             {/* 자세 분석 (데이터가 있는 경우) */}
-            {behaviorData.postureStats && (
+            {displayBehaviorData.postureStats && (
               <Card variant="bordered" padding="md">
                 <h3 className="text-lg font-semibold text-[var(--neutral-800)] mb-4">🧘 자세 분석</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="text-center p-3 bg-green-50 rounded-xl">
-                    <p className="text-2xl font-bold text-green-600">{behaviorData.postureStats.uprightPercentage}%</p>
+                    <p className="text-2xl font-bold text-green-600">{displayBehaviorData.postureStats.uprightPercentage}%</p>
                     <p className="text-sm text-[var(--neutral-600)]">바른 자세</p>
                   </div>
                   <div className="text-center p-3 bg-yellow-50 rounded-xl">
-                    <p className="text-2xl font-bold text-yellow-600">{behaviorData.postureStats.leftTiltPercentage}%</p>
+                    <p className="text-2xl font-bold text-yellow-600">{displayBehaviorData.postureStats.leftTiltPercentage}%</p>
                     <p className="text-sm text-[var(--neutral-600)]">왼쪽 기울임</p>
                   </div>
                   <div className="text-center p-3 bg-yellow-50 rounded-xl">
-                    <p className="text-2xl font-bold text-yellow-600">{behaviorData.postureStats.rightTiltPercentage}%</p>
+                    <p className="text-2xl font-bold text-yellow-600">{displayBehaviorData.postureStats.rightTiltPercentage}%</p>
                     <p className="text-sm text-[var(--neutral-600)]">오른쪽 기울임</p>
                   </div>
                   <div className="text-center p-3 bg-orange-50 rounded-xl">
-                    <p className="text-2xl font-bold text-orange-600">{behaviorData.postureStats.slouchingPercentage}%</p>
+                    <p className="text-2xl font-bold text-orange-600">{displayBehaviorData.postureStats.slouchingPercentage}%</p>
                     <p className="text-sm text-[var(--neutral-600)]">구부정</p>
                   </div>
                 </div>
@@ -611,11 +880,11 @@ export default function AssessmentResultPage() {
             )}
 
             {/* 관심도 분석 (데이터가 있는 경우) */}
-            {behaviorData.contentInterests && behaviorData.contentInterests.length > 0 && (
+            {displayBehaviorData.contentInterests && displayBehaviorData.contentInterests.length > 0 && (
               <Card variant="bordered" padding="md">
                 <h3 className="text-lg font-semibold text-[var(--neutral-800)] mb-4">🔍 콘텐츠 관심도</h3>
                 <div className="space-y-3">
-                  {behaviorData.contentInterests.map((item, i) => (
+                  {displayBehaviorData.contentInterests.map((item, i) => (
                     <div key={i} className="flex items-center gap-3">
                       <span className="text-sm text-[var(--neutral-600)] w-24">{item.region}</span>
                       <div className="flex-1 h-4 bg-[var(--neutral-100)] rounded-full overflow-hidden">
@@ -632,8 +901,8 @@ export default function AssessmentResultPage() {
             )}
 
             {/* 데이터가 충분하지 않은 경우 안내 */}
-            {(!behaviorData.emotionDistribution || behaviorData.emotionDistribution.length === 0) &&
-              !behaviorData.postureStats && (
+            {(!displayBehaviorData.emotionDistribution || displayBehaviorData.emotionDistribution.length === 0) &&
+              !displayBehaviorData.postureStats && (
               <div className="p-6 bg-[var(--info)]/10 rounded-xl text-center">
                 <span className="text-3xl mb-2 block">📹</span>
                 <p className="text-[var(--info)] font-medium">
@@ -652,8 +921,8 @@ export default function AssessmentResultPage() {
           <div className="flex items-center justify-between">
             <span className="text-[var(--neutral-600)]">총 소요 시간</span>
             <span className="text-xl font-bold text-[var(--neutral-800)]">
-              {Math.floor(result.duration / 60000)}분{' '}
-              {Math.floor((result.duration % 60000) / 1000)}초
+              {Math.floor(displayResult.duration / 60000)}분{' '}
+              {Math.floor((displayResult.duration % 60000) / 1000)}초
             </span>
           </div>
         </Card>
@@ -696,5 +965,22 @@ export default function AssessmentResultPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function AssessmentResultPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[var(--neutral-50)] flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin w-12 h-12 border-4 border-[var(--primary)] border-t-transparent rounded-full mx-auto mb-4" />
+            <p className="text-[var(--neutral-600)]">결과를 불러오는 중...</p>
+          </div>
+        </div>
+      }
+    >
+      <AssessmentResultContent />
+    </Suspense>
   );
 }

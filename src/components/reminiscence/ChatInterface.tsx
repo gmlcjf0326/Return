@@ -89,7 +89,7 @@ export function ChatInterface({
               <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                   message.role === 'user'
-                    ? 'bg-primary-600 text-white'
+                    ? 'bg-[var(--primary-deep)] text-white'
                     : message.role === 'system'
                     ? 'bg-amber-50 text-amber-800 border border-amber-200'
                     : 'bg-slate-100 text-slate-800'

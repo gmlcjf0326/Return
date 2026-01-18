@@ -9,11 +9,17 @@ import { prisma } from '@/lib/db/prisma';
 import { generateInitialQuestion } from '@/lib/ai/llm';
 import { getRandomInitialQuestion, getRandomFollowUpQuestion } from '@/data/reminiscenceQuestions';
 import type { PhotoData, PhotoCategory } from '@/components/photos/PhotoCard';
+import type { UserProfileForChat } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { photoId, sessionId, photoData } = body;
+    const { photoId, sessionId, photoData, userProfile } = body as {
+      photoId: string;
+      sessionId: string;
+      photoData?: PhotoData;
+      userProfile?: UserProfileForChat;
+    };
 
     if (!photoId || !sessionId) {
       return NextResponse.json(
@@ -79,7 +85,7 @@ export async function POST(request: NextRequest) {
     // TODO: [LLM_API] 실제 LLM으로 초기 질문 생성
     let firstQuestion: string;
     try {
-      firstQuestion = await generateInitialQuestion(photo);
+      firstQuestion = await generateInitialQuestion(photo, userProfile);
     } catch (error) {
       console.error('Failed to generate initial question:', error);
       firstQuestion = getRandomInitialQuestion(category);

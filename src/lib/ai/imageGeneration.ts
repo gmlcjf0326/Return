@@ -8,8 +8,11 @@
 import type { PhotoData, PhotoCategory } from '@/components/photos/PhotoCard';
 import { hasGeminiApiKey, generateImage as geminiGenerateImage } from './gemini';
 
-// 이미지 스타일 옵션
-export type DiaryImageStyle = 'watercolor' | 'pencil' | 'crayon' | 'pastel';
+// 이미지 스타일 - 색연필 스케치로 고정
+export type DiaryImageStyle = 'pencil';
+
+// 기본 스타일 (색연필 스케치)
+export const DEFAULT_DIARY_STYLE: DiaryImageStyle = 'pencil';
 
 // 이미지 생성 설정
 export interface DiaryImageConfig {
@@ -28,35 +31,20 @@ export interface GeneratedImage {
   isPlaceholder: boolean;
 }
 
-// 스타일별 프롬프트 수정자
+// 색연필 스케치 스타일 프롬프트
+const COLORED_PENCIL_STYLE = 'colored pencil sketch style, soft hand-drawn lines, gentle shading, warm nostalgic feeling, artistic illustration, like a diary illustration';
+
+// 스타일별 프롬프트 수정자 (색연필 스케치만 유지)
 const styleModifiers: Record<DiaryImageStyle, string> = {
-  watercolor: 'watercolor painting style, soft brush strokes, gentle colors, dreamy atmosphere',
-  pencil: 'pencil sketch style, hand-drawn, detailed lines, artistic shading',
-  crayon: 'crayon drawing style, childlike innocence, vibrant colors, playful',
-  pastel: 'soft pastel colors, gentle gradients, warm and cozy atmosphere',
+  pencil: COLORED_PENCIL_STYLE,
 };
 
-// 스타일별 UI 표시 정보
+// 스타일별 UI 표시 정보 (색연필 스케치만 유지)
 export const imageStyleInfo: Record<DiaryImageStyle, { label: string; icon: string; description: string }> = {
-  watercolor: {
-    label: '수채화',
-    icon: '🎨',
-    description: '부드러운 수채화 스타일',
-  },
   pencil: {
-    label: '연필 스케치',
+    label: '색연필 스케치',
     icon: '✏️',
-    description: '손으로 그린 듯한 연필화',
-  },
-  crayon: {
-    label: '크레용',
-    icon: '🖍️',
-    description: '동화 같은 크레용 스타일',
-  },
-  pastel: {
-    label: '파스텔',
-    icon: '🌸',
-    description: '따뜻한 파스텔톤 그림',
+    description: '따뜻한 색연필 스케치 스타일',
   },
 };
 

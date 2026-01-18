@@ -151,10 +151,10 @@ export function MemoryGame({ level = 1, onComplete, onExit }: MemoryGameProps) {
       {/* 게임 보드 */}
       <Card className="p-6">
         <div
-          className="grid gap-3 justify-center mx-auto"
+          className="grid gap-4 md:gap-5 justify-center mx-auto"
           style={{
             gridTemplateColumns: `repeat(${levelConfig.gridSize.cols}, minmax(0, 1fr))`,
-            maxWidth: `${levelConfig.gridSize.cols * 100}px`,
+            maxWidth: `${levelConfig.gridSize.cols * 120}px`,
           }}
         >
           {gameState.cards.map((card) => (

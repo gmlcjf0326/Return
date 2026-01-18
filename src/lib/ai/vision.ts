@@ -17,11 +17,15 @@ export async function analyzePhoto(
   imageUrl: string,
   isBase64: boolean = false
 ): Promise<PhotoAnalysisResult> {
+  const client = getOpenAIClient();
+  if (!client) {
+    throw new Error('OpenAI API가 설정되지 않았습니다. OPENAI_API_KEY 환경 변수를 확인하세요.');
+  }
+
   const imageContent = isBase64
     ? { type: 'image_url' as const, image_url: { url: imageUrl } }
     : { type: 'image_url' as const, image_url: { url: imageUrl } };
 
-  const client = getOpenAIClient();
   const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
@@ -87,11 +91,22 @@ export async function generateReminiscenceQuestions(
     previousResponses?: string[];
   }
 ): Promise<string[]> {
+  const client = getOpenAIClient();
+  if (!client) {
+    // OpenAI가 설정되지 않은 경우 기본 질문 반환
+    return [
+      '이 사진에서 무엇이 보이시나요?',
+      '이 장면을 보니 어떤 기분이 드시나요?',
+      '비슷한 경험을 해보신 적이 있으신가요?',
+      '이때 누구와 함께 계셨나요?',
+      '이 사진에서 가장 기억에 남는 것은 무엇인가요?',
+    ];
+  }
+
   const contextInfo = userContext?.birthYear
     ? `사용자는 ${userContext.birthYear}년생입니다.`
     : '';
 
-  const client = getOpenAIClient();
   const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [

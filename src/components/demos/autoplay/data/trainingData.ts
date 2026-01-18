@@ -31,8 +31,8 @@ export const trainingDemoData: DemoData = {
       duration: 1500,
       screenType: 'training-select',
       actionLabel: '기억력 훈련 선택',
-      // 기억력 카드: 2x2 그리드 왼쪽 상단
-      highlight: { x: 30, y: 38 },
+      // 기억력 카드: 2x2 그리드 왼쪽 상단 (pt-16 패딩 고려)
+      highlight: { x: 30, y: 32 },
     },
     {
       id: 'card-game',
@@ -50,7 +50,7 @@ export const trainingDemoData: DemoData = {
       screenType: 'memory-game-play',
       actionLabel: '카드 뒤집기',
       // 카드 그리드 내 특정 카드 (4x3 그리드의 2번째 줄)
-      highlight: { x: 30, y: 50 },
+      highlight: { x: 30, y: 42 },
     },
     {
       id: 'calc-click',
@@ -58,8 +58,8 @@ export const trainingDemoData: DemoData = {
       duration: 1500,
       screenType: 'training-select',
       actionLabel: '계산력 훈련 선택',
-      // 계산력 카드: 2x2 그리드 오른쪽 상단
-      highlight: { x: 70, y: 38 },
+      // 계산력 카드: 2x2 그리드 오른쪽 상단 (pt-16 패딩 고려)
+      highlight: { x: 70, y: 32 },
       transition: 'slide-left',
     },
     {
@@ -78,7 +78,7 @@ export const trainingDemoData: DemoData = {
       screenType: 'calculation-game',
       actionLabel: '42 입력',
       // 숫자패드 중앙 영역 (3x4 그리드)
-      highlight: { x: 50, y: 55 },
+      highlight: { x: 50, y: 48 },
     },
     {
       id: 'reminiscence',
@@ -95,8 +95,8 @@ export const trainingDemoData: DemoData = {
       duration: 2000,
       screenType: 'reminiscence-chat',
       actionLabel: '메시지 전송',
-      // 전송 버튼: 오른쪽 하단 모서리
-      highlight: { x: 88, y: 78 },
+      // 전송 버튼: 입력 영역 오른쪽 (pb-32 바로 위)
+      highlight: { x: 85, y: 68 },
     },
     {
       id: 'diary',

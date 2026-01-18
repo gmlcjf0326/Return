@@ -17,6 +17,16 @@ export interface ProfileData {
   occupation?: string;
 }
 
+// 회상 대화용 사용자 프로필 정보
+export interface UserProfileForChat {
+  nickname?: string;
+  birthYear?: number;
+  age?: number;
+  gender?: 'male' | 'female' | 'other';
+  region?: string;
+  interests?: string[];
+}
+
 // 진단 관련 타입
 export interface Assessment {
   id: number;

@@ -3,11 +3,17 @@ import OpenAI from 'openai';
 // OpenAI 클라이언트 (서버 사이드 전용)
 // API 키가 없으면 null을 반환 (빌드 시 에러 방지)
 let openaiClient: OpenAI | null = null;
+let openaiInitialized = false;
 
-function getOpenAIClient(): OpenAI {
-  if (!openaiClient) {
+function getOpenAIClient(): OpenAI | null {
+  if (!openaiInitialized) {
+    openaiInitialized = true;
     if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.');
+      console.warn(
+        'OPENAI_API_KEY 환경 변수가 설정되지 않았습니다. ' +
+        'OpenAI 관련 기능(Vision, Whisper 등)이 비활성화됩니다.'
+      );
+      return null;
     }
     openaiClient = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -17,8 +23,11 @@ function getOpenAIClient(): OpenAI {
 }
 
 export const openai = {
-  get client(): OpenAI {
+  get client(): OpenAI | null {
     return getOpenAIClient();
+  },
+  get isAvailable(): boolean {
+    return getOpenAIClient() !== null;
   }
 };
 
@@ -27,8 +36,12 @@ export async function generateText(
   prompt: string,
   systemPrompt?: string,
   options?: { maxTokens?: number; temperature?: number }
-) {
+): Promise<string | null> {
   const client = getOpenAIClient();
+  if (!client) {
+    return null;
+  }
+
   const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
@@ -46,8 +59,12 @@ export async function generateText(
 export async function analyzeImage(
   imageUrl: string,
   prompt: string
-): Promise<string> {
+): Promise<string | null> {
   const client = getOpenAIClient();
+  if (!client) {
+    return null;
+  }
+
   const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
@@ -72,8 +89,12 @@ export async function analyzeImage(
 }
 
 // 텍스트 임베딩 생성
-export async function createEmbedding(text: string): Promise<number[]> {
+export async function createEmbedding(text: string): Promise<number[] | null> {
   const client = getOpenAIClient();
+  if (!client) {
+    return null;
+  }
+
   const response = await client.embeddings.create({
     model: 'text-embedding-3-small',
     input: text,
@@ -83,8 +104,12 @@ export async function createEmbedding(text: string): Promise<number[]> {
 }
 
 // Whisper로 음성 인식
-export async function transcribeAudio(audioFile: File): Promise<string> {
+export async function transcribeAudio(audioFile: File): Promise<string | null> {
   const client = getOpenAIClient();
+  if (!client) {
+    return null;
+  }
+
   const response = await client.audio.transcriptions.create({
     file: audioFile,
     model: 'whisper-1',

@@ -23,8 +23,8 @@ export default function CategoryFilter({
   className,
 }: CategoryFilterProps) {
   return (
-    <div className={cn('w-full overflow-x-auto', className)}>
-      <div className="flex gap-2 pb-2 min-w-max">
+    <div className={cn('w-full', className)}>
+      <div className="flex flex-wrap gap-2 pb-2">
         {/* 전체 버튼 */}
         <FilterButton
           isSelected={selectedCategory === null}

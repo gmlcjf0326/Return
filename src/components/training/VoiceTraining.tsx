@@ -104,9 +104,13 @@ export default function VoiceTraining({
   const [currentSimilarity, setCurrentSimilarity] = useState<number | null>(null);
   const [attemptStatus, setAttemptStatus] = useState<'idle' | 'listening' | 'success' | 'fail'>('idle');
   const [displayedText, setDisplayedText] = useState('');
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
   // 타이머 참조
   const autoAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const prevIsListeningRef = useRef<boolean>(false);
+  const handleNextRef = useRef<(score?: number) => void>(() => {});
 
   // 현재 난이도에 맞는 과제 필터링
   const filteredExercises = voiceExercises.filter(e => e.difficulty <= initialDifficulty + 1);
@@ -134,8 +138,37 @@ export default function VoiceTraining({
       if (autoAdvanceTimerRef.current) {
         clearTimeout(autoAdvanceTimerRef.current);
       }
+      if (retryCountdownTimerRef.current) {
+        clearInterval(retryCountdownTimerRef.current);
+      }
     };
   }, []);
+
+  // 재시도 카운트다운 처리
+  useEffect(() => {
+    if (retryCountdown === null) return;
+
+    if (retryCountdown > 0) {
+      retryCountdownTimerRef.current = setTimeout(() => {
+        setRetryCountdown(retryCountdown - 1);
+      }, 1000);
+    } else {
+      // 카운트다운 완료 - 자동으로 다시 시작
+      setRetryCountdown(null);
+      setCurrentAttempt(prev => prev + 1);
+      resetTranscript();
+      setDisplayedText('');
+      setCurrentSimilarity(null);
+      setAttemptStatus('listening');
+      startListening();
+    }
+
+    return () => {
+      if (retryCountdownTimerRef.current) {
+        clearTimeout(retryCountdownTimerRef.current);
+      }
+    };
+  }, [retryCountdown, resetTranscript, startListening]);
 
   // 실시간 텍스트 표시 업데이트
   useEffect(() => {
@@ -143,9 +176,19 @@ export default function VoiceTraining({
     setDisplayedText(fullText);
   }, [transcript, interimTranscript]);
 
-  // 인식 완료 시 유사도 계산
+  // 인식 완료 시 유사도 계산 (isListening이 true → false로 전환될 때만)
   useEffect(() => {
-    if (!isListening && transcript && attemptStatus === 'listening') {
+    const wasListening = prevIsListeningRef.current;
+    prevIsListeningRef.current = isListening;
+
+    // isListening이 true에서 false로 전환되고, attemptStatus가 listening일 때만 처리
+    if (wasListening && !isListening && attemptStatus === 'listening') {
+      // transcript가 비어있으면 idle로 복귀
+      if (!transcript) {
+        setAttemptStatus('idle');
+        return;
+      }
+
       const targetText = currentExercise?.targetText;
 
       if (targetText) {
@@ -154,17 +197,18 @@ export default function VoiceTraining({
 
         if (similarity >= currentExercise.successThreshold) {
           setAttemptStatus('success');
-          // 3초 후 자동으로 다음으로 이동
+          // 2초 후 자동으로 다음으로 이동
           autoAdvanceTimerRef.current = setTimeout(() => {
-            handleNext(similarity);
+            handleNextRef.current(similarity);
           }, 2000);
         } else if (currentAttempt >= currentExercise.maxAttempts) {
           setAttemptStatus('fail');
-          // 3초 후 자동으로 다음으로 이동
+          // 2초 후 자동으로 다음으로 이동
           autoAdvanceTimerRef.current = setTimeout(() => {
-            handleNext(similarity);
+            handleNextRef.current(similarity);
           }, 2000);
         } else {
+          // 실패했지만 재시도 가능 - 다시 시작 버튼 표시
           setAttemptStatus('fail');
         }
       } else {
@@ -172,17 +216,27 @@ export default function VoiceTraining({
         setAttemptStatus('success');
         setCurrentSimilarity(100);
         autoAdvanceTimerRef.current = setTimeout(() => {
-          handleNext(100);
+          handleNextRef.current(100);
         }, 2000);
       }
     }
-  }, [isListening, transcript, attemptStatus]);
+  }, [isListening, transcript, attemptStatus, currentExercise, currentAttempt]);
 
   // 음성 인식 시작
-  const handleStartListening = useCallback(() => {
+  const handleStartListening = useCallback((isRetry: boolean = false) => {
     if (autoAdvanceTimerRef.current) {
       clearTimeout(autoAdvanceTimerRef.current);
     }
+    if (retryCountdownTimerRef.current) {
+      clearTimeout(retryCountdownTimerRef.current);
+    }
+    setRetryCountdown(null);
+
+    // 재시도인 경우 시도 횟수 증가
+    if (isRetry) {
+      setCurrentAttempt(prev => prev + 1);
+    }
+
     resetTranscript();
     setDisplayedText('');
     setCurrentSimilarity(null);
@@ -193,13 +247,21 @@ export default function VoiceTraining({
   // 음성 인식 중지
   const handleStopListening = useCallback(() => {
     stopListening();
-  }, [stopListening]);
+    // transcript가 비어있으면 idle 상태로 복귀
+    if (!transcript && !interimTranscript) {
+      setAttemptStatus('idle');
+    }
+  }, [stopListening, transcript, interimTranscript]);
 
   // 다시 시도
   const handleRetry = useCallback(() => {
     if (autoAdvanceTimerRef.current) {
       clearTimeout(autoAdvanceTimerRef.current);
     }
+    if (retryCountdownTimerRef.current) {
+      clearTimeout(retryCountdownTimerRef.current);
+    }
+    setRetryCountdown(null);
     setCurrentAttempt(prev => prev + 1);
     resetTranscript();
     setDisplayedText('');
@@ -212,6 +274,10 @@ export default function VoiceTraining({
     if (autoAdvanceTimerRef.current) {
       clearTimeout(autoAdvanceTimerRef.current);
     }
+    if (retryCountdownTimerRef.current) {
+      clearTimeout(retryCountdownTimerRef.current);
+    }
+    setRetryCountdown(null);
 
     if (!currentExercise) return;
 
@@ -233,6 +299,9 @@ export default function VoiceTraining({
       }
     }
   }, [currentExercise, currentExerciseIndex, filteredExercises.length, totalScore, completedExercises, currentSimilarity, resetTranscript, onComplete]);
+
+  // handleNextRef 업데이트
+  handleNextRef.current = handleNext;
 
   // 지원하지 않는 브라우저
   if (!isSupported) {
@@ -276,6 +345,7 @@ export default function VoiceTraining({
             setCurrentAttempt(1);
             setCurrentSimilarity(null);
             setAttemptStatus('idle');
+            setRetryCountdown(null);
             resetTranscript();
             setDisplayedText('');
           }}
@@ -389,7 +459,7 @@ export default function VoiceTraining({
             ) : attemptStatus === 'fail' && currentAttempt >= currentExercise.maxAttempts ? (
               <span className="text-yellow-600">다음으로 넘어갑니다</span>
             ) : attemptStatus === 'fail' ? (
-              <span className="text-yellow-600">다시 시도해보세요</span>
+              <span className="text-yellow-600">아래 버튼을 눌러 다시 시도해보세요</span>
             ) : (
               <span>아래 버튼을 눌러 시작하세요</span>
             )}
@@ -420,30 +490,21 @@ export default function VoiceTraining({
 
         {/* 버튼 영역 */}
         <div className="flex justify-center gap-3">
-          {attemptStatus === 'idle' || (attemptStatus === 'fail' && currentAttempt < currentExercise.maxAttempts) ? (
-            <>
-              {attemptStatus === 'fail' && (
-                <button
-                  onClick={handleRetry}
-                  className="flex items-center gap-2 px-6 py-4 rounded-xl font-medium text-lg
-                    border-2 border-[var(--neutral-300)] text-[var(--neutral-600)]
-                    hover:bg-[var(--neutral-100)] transition-all duration-200 active:scale-95"
-                >
-                  <span className="text-xl">🔄</span>
-                  다시 시도
-                </button>
-              )}
-              <button
-                onClick={handleStartListening}
-                className="flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg
-                  bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]
-                  transition-all duration-200 active:scale-95"
-              >
-                <span className="text-xl">🎤</span>
-                {attemptStatus === 'idle' ? '시작하기' : '다시 말하기'}
-              </button>
-            </>
-          ) : isListening ? (
+          {/* 대기 상태 - 시작하기 버튼 */}
+          {attemptStatus === 'idle' && (
+            <button
+              onClick={() => handleStartListening()}
+              className="flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg
+                bg-[var(--primary)] text-white hover:bg-[var(--primary-deep)]
+                transition-all duration-200 active:scale-95"
+            >
+              <span className="text-xl">🎤</span>
+              시작하기
+            </button>
+          )}
+
+          {/* 듣는 중 - 인식 중지 버튼 */}
+          {isListening && (
             <button
               onClick={handleStopListening}
               className="flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg
@@ -453,16 +514,32 @@ export default function VoiceTraining({
               <span className="w-4 h-4 bg-white rounded-sm"></span>
               인식 중지
             </button>
-          ) : (attemptStatus === 'success' || (attemptStatus === 'fail' && currentAttempt >= currentExercise.maxAttempts)) ? (
+          )}
+
+          {/* 실패 + 재시도 가능 - 다시 시작 버튼 */}
+          {attemptStatus === 'fail' && currentAttempt < currentExercise.maxAttempts && !isListening && (
+            <button
+              onClick={() => handleStartListening(true)}
+              className="flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg
+                bg-[var(--primary)] text-white hover:bg-[var(--primary-deep)]
+                transition-all duration-200 active:scale-95"
+            >
+              <span className="text-xl">🔄</span>
+              다시 시작
+            </button>
+          )}
+
+          {/* 성공 또는 최대 시도 횟수 도달 - 다음 버튼 */}
+          {(attemptStatus === 'success' || (attemptStatus === 'fail' && currentAttempt >= currentExercise.maxAttempts)) && !isListening && (
             <button
               onClick={() => handleNext()}
               className="flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-lg
-                bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)]
+                bg-[var(--primary)] text-white hover:bg-[var(--primary-deep)]
                 transition-all duration-200 active:scale-95"
             >
               {currentExerciseIndex < filteredExercises.length - 1 ? '다음 과제' : '완료'}
             </button>
-          ) : null}
+          )}
         </div>
       </div>
 

@@ -7,11 +7,11 @@
   --background: #F8FAFC;
   --foreground: #1E293B;
 
-  /* Primary Colors - Medical Blue */
-  --primary-deep: #1E40AF;
-  --primary: #3B82F6;
-  --primary-light: #60A5FA;
-  --primary-lighter: #DBEAFE;
+  /* Primary Colors - Indigo Blue */
+  --primary-deep: #312E81;   /* Indigo-900 - 깊고 따뜻한 보라빛 파랑 */
+  --primary: #4F46E5;        /* Indigo-600 - 메인 인디고 */
+  --primary-light: #818CF8;  /* Indigo-400 - 밝은 인디고 */
+  --primary-lighter: #E0E7FF; /* Indigo-100 - 배경용 옅은 인디고 */
 
   /* Neutral Colors */
   --neutral-50: #F8FAFC;
@@ -213,7 +213,7 @@ body {
 
 .card-hover:hover {
   border-color: var(--primary-light);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
 }
 
 /* Button base */

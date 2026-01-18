@@ -30,21 +30,38 @@ Storage: Supabase Storage
 ### 상태 관리
 - `src/store/sessionStore.ts` - 세션 관리 (UUID, LocalStorage)
 - `src/store/assessmentStore.ts` - 진단 상태 관리
+- `src/store/trainingStore.ts` - 훈련 상태 관리
+- `src/store/photoStore.ts` - 사진 상태 관리
 
 ### UI 컴포넌트
-- `src/components/ui/` - Button, Card, DataPanel, ProgressBar, StatusBadge
-- `src/components/assessment/` - 진단 관련 컴포넌트 (구현 예정)
-- `src/components/charts/` - 차트 컴포넌트 (구현 예정)
+- `src/components/ui/` - 공통 UI (Button, Card, Modal, DataPanel, ProgressBar, StatusBadge)
+- `src/components/assessment/` - 진단 컴포넌트 (Timer, QuestionCard, AnswerInput, AssessmentProgress, CameraPreview)
+- `src/components/charts/` - 차트 컴포넌트 (RadarChart, LineChart, BarChart, HeatmapChart, BehaviorMetrics 등 8개)
+- `src/components/training/` - 훈련 게임 컴포넌트 (MemoryGame, LanguageGame, CalculationGame, VoiceTraining, MovementTraining)
+- `src/components/photos/` - 사진 관리 컴포넌트 (PhotoAlbum, PhotoUploader, PhotoGallery, PhotoCard 등)
+- `src/components/reminiscence/` - 회상 컴포넌트 (ChatInterface, DiaryPage, DiaryEntry, ManuscriptPaper 등)
+- `src/components/demos/` - 데모 플레이어 시스템 (AssessmentDemo, MemoryGameDemo, ReminiscenceDemo 등)
+
+### 훅 (Hooks)
+- `src/hooks/useFaceDetection.ts` - 얼굴 감지 및 감정 분석
+- `src/hooks/usePoseDetection.ts` - 자세 감지
+- `src/hooks/useAudioRecording.ts` - 음성 녹음
+- `src/hooks/useSpeechRecognition.ts` - 음성 인식
+- `src/hooks/useMouseTracking.ts` - 마우스 추적
 
 ### API Routes
 - `src/app/api/session/` - 세션 CRUD
-- `src/app/api/assessment/` - 진단 API (구현 예정)
+- `src/app/api/assessment/` - 진단 API
+- `src/app/api/training/` - 훈련 API
+- `src/app/api/analytics/` - 분석 API
+- `src/app/api/photos/` - 사진 API
+- `src/app/api/reminiscence/` - 회상 API
 
 ### 유틸리티
 - `src/lib/db/prisma.ts` - Prisma 클라이언트
 - `src/lib/ai/openai.ts` - OpenAI API 함수
 - `src/lib/supabase.ts` - Supabase 클라이언트
-- `src/lib/scoring.ts` - 점수 계산 로직 (구현 예정)
+- `src/lib/scoring.ts` - 점수 계산 로직 (340줄)
 
 ### 타입 정의
 - `src/types/index.ts` - 전체 TypeScript 타입 (22개 인터페이스)
@@ -102,37 +119,61 @@ Storage: Supabase Storage
 
 ## API 엔드포인트
 
-### 세션 (구현됨)
+### 세션
 ```
 POST /api/session/create     - 새 세션 생성
 GET  /api/session/:id        - 세션 조회
 PATCH /api/session/:id       - 세션 업데이트
 ```
 
-### 진단 (구현 예정)
+### 진단
 ```
-POST /api/assessment/start   - 진단 시작
 POST /api/assessment/submit  - 응답 제출
 POST /api/assessment/analyze - AI 분석
 GET  /api/assessment/:id     - 결과 조회
 GET  /api/assessment/history - 이력 조회
 ```
 
+### 훈련
+```
+POST /api/training/start     - 훈련 시작
+POST /api/training/complete  - 훈련 완료
+```
+
+### 분석
+```
+GET /api/analytics/summary        - 요약 데이터
+GET /api/analytics/trends         - 트렌드 분석
+GET /api/analytics/recommendations - AI 추천
+GET /api/analytics/training-stats - 훈련 통계
+```
+
+### 사진
+```
+GET  /api/photos             - 사진 목록
+POST /api/photos             - 사진 등록
+POST /api/photos/upload      - 사진 업로드
+POST /api/photos/:id/auto-tag - 자동 태깅
+```
+
+### 회상
+```
+POST /api/reminiscence/start - 회상 세션 시작
+POST /api/reminiscence/chat  - 대화 메시지
+```
+
 ---
 
 ## 현재 진행 상태
 
-**완료**: Phase 1 (기반 구축)
-- 프로젝트 설정
-- 세션 시스템
-- UI 컴포넌트
-- DB 스키마
+**완료**: Phase 1-5
+- Phase 1: 기반 구축 (프로젝트 설정, 세션 시스템, UI 컴포넌트, DB 스키마)
+- Phase 2: 진단 모듈 (문항 설계, 평가 UI, 반응 측정, 결과 대시보드)
+- Phase 3: 회상치료 모듈 (사진 관리, AI 대화, 회상 기록)
+- Phase 4: 훈련 모듈 (기억력, 언어력, 계산력, 주의력 게임)
+- Phase 5: 분석 모듈 (트렌드 분석, AI 추천, 행동 분석)
 
-**진행 중**: Phase 2 (진단 모듈)
-- TASK-005: 문항 설계
-- TASK-006: 평가 UI
-- TASK-008: 반응 측정
-- TASK-010: 결과 대시보드
+**진행 중**: 버그 수정 및 안정화
 
 ---
 
@@ -165,5 +206,6 @@ npx prisma db push
 
 ## 관련 문서
 
-- `docs/PROGRESS.md` - 개발 진행 기록
-- 계획 파일: `C:\Users\plani\.claude\plans\wiggly-foraging-bubble.md`
+- `docs/PROGRESS.md` - 개발 진행 기록 (Phase 1-5 완료)
+- `docs/ARCHITECTURE.md` - 시스템 아키텍처
+- `docs/DECISIONS.md` - 기술 의사결정 기록

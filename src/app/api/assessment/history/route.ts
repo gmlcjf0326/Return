@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/db/prisma';
+import { prisma } from '@/lib/db/prisma';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
-    const limit = parseInt(searchParams.get('limit') ?? '10');
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam, 10) : 10;
 
     if (!sessionId) {
       return NextResponse.json(
         { success: false, error: { code: 'INVALID_REQUEST', message: '세션 ID가 필요합니다.' } },
+        { status: 400 }
+      );
+    }
+
+    // limit 파라미터 검증
+    if (isNaN(limit) || limit < 1 || limit > 100) {
+      return NextResponse.json(
+        { success: false, error: { code: 'INVALID_REQUEST', message: 'limit은 1-100 사이의 숫자여야 합니다.' } },
         { status: 400 }
       );
     }

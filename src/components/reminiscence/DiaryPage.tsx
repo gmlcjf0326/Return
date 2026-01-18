@@ -50,7 +50,7 @@ export default function DiaryPage({
   generatedImageUrl,
   diaryText,
   date,
-  selectedStyle = 'watercolor',
+  selectedStyle = 'pencil',
   onStyleChange,
   onRegenerateImage,
   isPlaceholder = true,

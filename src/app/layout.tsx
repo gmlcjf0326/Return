@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import Script from "next/script";
 import Header from '@/components/layout/Header';
 import StorageMigration from '@/components/layout/StorageMigration';
 import './globals.css';
@@ -27,19 +26,6 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
-        {process.env.NODE_ENV === "development" && (
-          <Script
-            src="//unpkg.com/react-grab/dist/index.global.js"
-            crossOrigin="anonymous"
-            strategy="beforeInteractive"
-          />
-        )}
-        {process.env.NODE_ENV === "development" && (
-          <Script
-            src="//unpkg.com/@react-grab/claude-code/dist/client.global.js"
-            strategy="lazyOnload"
-          />
-        )}
         {/* Nanum Gothic Font */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

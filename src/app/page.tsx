@@ -6,18 +6,66 @@ import { useRouter } from 'next/navigation';
 import { useSessionStore } from '@/store/sessionStore';
 import { Button, Card, CardHeader, CardContent, DataPanel, StatusBadge } from '@/components/ui';
 import { DemoModal, DemoPlayer, CardPlayButton, type DemoType, type AutoplayDemoType } from '@/components/demos';
+import type { Assessment } from '@/types';
 
 export default function Home() {
   const router = useRouter();
   const { session, isInitialized, initSession } = useSessionStore();
   const [activeDemo, setActiveDemo] = useState<DemoType | null>(null);
   const [autoplayDemo, setAutoplayDemo] = useState<AutoplayDemoType | null>(null);
+  const [latestAssessment, setLatestAssessment] = useState<Assessment | null>(null);
+  const [isLoadingAssessment, setIsLoadingAssessment] = useState(true);
 
   useEffect(() => {
     if (!isInitialized) {
       initSession();
     }
   }, [isInitialized, initSession]);
+
+  // Fetch latest assessment data
+  useEffect(() => {
+    const fetchLatestAssessment = async () => {
+      if (!session?.id) {
+        setIsLoadingAssessment(false);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/assessment/history?sessionId=${session.id}&limit=1`);
+        if (res.ok) {
+          const result = await res.json();
+          // API returns { success: true, data: [...] }
+          const assessments = result.data || result;
+          if (Array.isArray(assessments) && assessments.length > 0) {
+            setLatestAssessment(assessments[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch assessment:', error);
+      } finally {
+        setIsLoadingAssessment(false);
+      }
+    };
+
+    if (isInitialized) {
+      fetchLatestAssessment();
+    }
+  }, [session?.id, isInitialized]);
+
+  // Helper: Convert raw score to 100-point scale for display
+  const getScoreDisplay = (score: number | null | undefined, maxScore: number): string => {
+    if (score === null || score === undefined) return '--';
+    return String(Math.round((score / maxScore) * 100));
+  };
+
+  // Helper: Get status based on percentage score
+  const getScoreStatus = (score: number | null | undefined, maxScore: number): 'normal' | 'caution' | 'warning' | 'danger' | undefined => {
+    if (score === null || score === undefined) return undefined;
+    const percentage = (score / maxScore) * 100;
+    if (percentage >= 85) return 'normal';
+    if (percentage >= 70) return 'caution';
+    if (percentage >= 55) return 'warning';
+    return 'danger';
+  };
 
   return (
     <div className="min-h-full bg-[var(--neutral-50)]">
@@ -141,56 +189,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Demo Section */}
-        <section className="mb-8">
-          <h3 className="text-xl font-bold text-[var(--neutral-800)] mb-4">훈련 체험해보기</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <button
-              onClick={() => setActiveDemo('memory')}
-              className="p-4 bg-white rounded-xl border border-[var(--neutral-200)] hover:shadow-md transition-all text-center group"
-            >
-              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                <span className="text-2xl">🎴</span>
-              </div>
-              <h5 className="font-semibold text-[var(--neutral-700)]">기억력 게임</h5>
-              <p className="text-xs text-[var(--neutral-500)] mt-1">카드 매칭</p>
-            </button>
-
-            <button
-              onClick={() => setActiveDemo('calculation')}
-              className="p-4 bg-white rounded-xl border border-[var(--neutral-200)] hover:shadow-md transition-all text-center group"
-            >
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                <span className="text-2xl">🔢</span>
-              </div>
-              <h5 className="font-semibold text-[var(--neutral-700)]">계산력 게임</h5>
-              <p className="text-xs text-[var(--neutral-500)] mt-1">수학 문제</p>
-            </button>
-
-            <button
-              onClick={() => setActiveDemo('language')}
-              className="p-4 bg-white rounded-xl border border-[var(--neutral-200)] hover:shadow-md transition-all text-center group"
-            >
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                <span className="text-2xl">📖</span>
-              </div>
-              <h5 className="font-semibold text-[var(--neutral-700)]">언어력 게임</h5>
-              <p className="text-xs text-[var(--neutral-500)] mt-1">단어 퍼즐</p>
-            </button>
-
-            <button
-              onClick={() => setActiveDemo('reminiscence')}
-              className="p-4 bg-white rounded-xl border border-[var(--neutral-200)] hover:shadow-md transition-all text-center group"
-            >
-              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                <span className="text-2xl">💬</span>
-              </div>
-              <h5 className="font-semibold text-[var(--neutral-700)]">회상 대화</h5>
-              <p className="text-xs text-[var(--neutral-500)] mt-1">추억 이야기</p>
-            </button>
-          </div>
-        </section>
-
         {/* Quick Links */}
         <section className="mb-8">
           <h3 className="text-xl font-bold text-[var(--neutral-800)] mb-4">바로가기</h3>
@@ -245,27 +243,75 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Recent Results (Placeholder) */}
+        {/* Recent Results */}
         <section className="mb-8">
           <h3 className="text-xl font-bold text-[var(--neutral-800)] mb-4">최근 인지 상태</h3>
           <Card>
             <CardContent>
               <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-                <DataPanel value="--" label="기억력" unit="/100" size="sm" />
-                <DataPanel value="--" label="주의력" unit="/100" size="sm" />
-                <DataPanel value="--" label="언어력" unit="/100" size="sm" />
-                <DataPanel value="--" label="계산력" unit="/100" size="sm" />
-                <DataPanel value="--" label="실행기능" unit="/100" size="sm" />
-                <DataPanel value="--" label="시공간력" unit="/100" size="sm" />
+                <DataPanel
+                  value={getScoreDisplay(latestAssessment?.memoryScore, 20)}
+                  label="기억력"
+                  unit="/100"
+                  size="sm"
+                  status={getScoreStatus(latestAssessment?.memoryScore, 20)}
+                />
+                <DataPanel
+                  value={getScoreDisplay(latestAssessment?.attentionScore, 15)}
+                  label="주의력"
+                  unit="/100"
+                  size="sm"
+                  status={getScoreStatus(latestAssessment?.attentionScore, 15)}
+                />
+                <DataPanel
+                  value={getScoreDisplay(latestAssessment?.languageScore, 20)}
+                  label="언어력"
+                  unit="/100"
+                  size="sm"
+                  status={getScoreStatus(latestAssessment?.languageScore, 20)}
+                />
+                <DataPanel
+                  value={getScoreDisplay(latestAssessment?.calculationScore, 15)}
+                  label="계산력"
+                  unit="/100"
+                  size="sm"
+                  status={getScoreStatus(latestAssessment?.calculationScore, 15)}
+                />
+                <DataPanel
+                  value={getScoreDisplay(latestAssessment?.executiveScore, 15)}
+                  label="실행기능"
+                  unit="/100"
+                  size="sm"
+                  status={getScoreStatus(latestAssessment?.executiveScore, 15)}
+                />
+                <DataPanel
+                  value={getScoreDisplay(latestAssessment?.visuospatialScore, 15)}
+                  label="시공간력"
+                  unit="/100"
+                  size="sm"
+                  status={getScoreStatus(latestAssessment?.visuospatialScore, 15)}
+                />
               </div>
-              <div className="mt-6 text-center">
-                <p className="text-[var(--neutral-500)] mb-4">
-                  아직 진단 기록이 없습니다. 첫 번째 인지 진단을 시작해보세요.
-                </p>
-                <Button variant="outline" onClick={() => router.push('/assessment')}>
-                  첫 진단 시작하기
-                </Button>
-              </div>
+              {!latestAssessment && !isLoadingAssessment && (
+                <div className="mt-6 text-center">
+                  <p className="text-[var(--neutral-500)] mb-4">
+                    아직 진단 기록이 없습니다. 첫 번째 인지 진단을 시작해보세요.
+                  </p>
+                  <Button variant="outline" onClick={() => router.push('/assessment')}>
+                    첫 진단 시작하기
+                  </Button>
+                </div>
+              )}
+              {latestAssessment && (
+                <div className="mt-6 flex items-center justify-between text-sm text-[var(--neutral-500)]">
+                  <span>
+                    마지막 진단: {new Date(latestAssessment.createdAt).toLocaleDateString('ko-KR')}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => router.push('/assessment/history')}>
+                    이력 보기
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </section>

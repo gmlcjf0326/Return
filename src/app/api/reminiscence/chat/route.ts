@@ -9,11 +9,19 @@ import { prisma } from '@/lib/db/prisma';
 import { generateReminiscenceResponse, type Message } from '@/lib/ai/llm';
 import { getRandomFollowUpQuestion, getRandomHintQuestion } from '@/data/reminiscenceQuestions';
 import type { PhotoData, PhotoCategory } from '@/components/photos/PhotoCard';
+import type { UserProfileForChat } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { photoId, sessionId, message, conversationHistory, photoData } = body;
+    const { photoId, sessionId, message, conversationHistory, photoData, userProfile } = body as {
+      photoId: string;
+      sessionId: string;
+      message: string;
+      conversationHistory?: Array<{ role: string; content: string }>;
+      photoData?: PhotoData;
+      userProfile?: UserProfileForChat;
+    };
 
     if (!photoId || !sessionId || !message) {
       return NextResponse.json(
@@ -70,7 +78,7 @@ export async function POST(request: NextRequest) {
     // TODO: [LLM_API] 실제 LLM으로 응답 생성
     let assistantResponse: string;
     try {
-      assistantResponse = await generateReminiscenceResponse(photo, history, message);
+      assistantResponse = await generateReminiscenceResponse(photo, history, message, userProfile);
     } catch (error) {
       console.error('Failed to generate response:', error);
       assistantResponse = generateFallbackResponse(category, history.length);
