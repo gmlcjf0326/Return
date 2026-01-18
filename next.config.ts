@@ -74,15 +74,8 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // Webpack 설정 - MediaPipe 모듈 스텁 처리
+  // Webpack 설정
   webpack: (config, { isServer }) => {
-    // MediaPipe 모듈을 빈 모듈로 대체 (TensorFlow.js 백엔드 사용 시 불필요)
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@mediapipe/face_mesh': false,
-      '@mediapipe/pose': false,
-    };
-
     // 클라이언트 빌드에서 fs 모듈 제외
     if (!isServer) {
       config.resolve.fallback = {
