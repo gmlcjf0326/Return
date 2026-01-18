@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@google/genai": "^0.4.0",
+    "@mediapipe/face_mesh": "^0.4.1633559619",
     "@mediapipe/hands": "^0.4.1675469240",
     "@mediapipe/pose": "^0.5.1675469404",
     "@prisma/client": "^5.22.0",
