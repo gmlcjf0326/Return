@@ -1,7 +1,6 @@
 /**
  * 그림일기 결과 페이지
  * 회상 대화 완료 후 스케치북 스타일로 결과 표시
- * TODO: [IMAGE_API] 실제 이미지 생성 API 연동
  */
 
 'use client';
@@ -10,10 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { SketchbookFrame, DiaryEntry } from '@/components/reminiscence';
 import { Button, Card } from '@/components/ui';
-import { generateConversationSummary } from '@/lib/ai/llm';
 import {
-  generateDiaryImage,
-  buildDiaryPrompt,
   type DiaryImageStyle,
   type GeneratedImage,
   DEFAULT_DIARY_STYLE,
@@ -44,7 +40,7 @@ export default function ReminiscenceResultPage() {
   const [imageProgress, setImageProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState('');
 
-  // 세션 스토리지에서 대화 데이터 로드
+  // 세션 스토리지에서 대화 데이터 로드 및 그림일기 생성
   useEffect(() => {
     const loadConversationData = async () => {
       try {
@@ -61,23 +57,36 @@ export default function ReminiscenceResultPage() {
         const data: ConversationData = JSON.parse(stored);
         setConversationData(data);
 
-        // 대화 요약 생성
+        // API를 통해 그림일기 생성 (서버에서 AI 이미지 생성)
         setProgressMessage('AI가 대화를 분석하고 있어요...');
         setImageProgress(40);
 
-        const messages = data.messages.map(m => ({
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-        }));
+        const response = await fetch('/api/reminiscence/diary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            photoData: data.photoData,
+            messages: data.messages,
+            style: selectedStyle,
+          }),
+        });
 
-        const summaryText = await generateConversationSummary(data.photoData, messages);
-        setSummary(summaryText);
+        if (!response.ok) {
+          throw new Error('Failed to generate diary');
+        }
 
         setImageProgress(60);
         setProgressMessage('그림일기를 그리고 있어요...');
 
-        // 이미지 생성 (플레이스홀더)
-        await generateImageWithStyle(data.photoData, summaryText, selectedStyle);
+        const result = await response.json();
+
+        if (result.success) {
+          setSummary(result.summary);
+          setGeneratedImage(result.image);
+          console.log('Diary generated successfully, isPlaceholder:', result.image?.isPlaceholder);
+        } else {
+          throw new Error(result.error || 'Unknown error');
+        }
 
         setImageProgress(100);
         setProgressMessage('완료!');
@@ -91,24 +100,7 @@ export default function ReminiscenceResultPage() {
 
     loadConversationData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 마운트 시 1회만 실행 (generateImageWithStyle, selectedStyle는 안정적인 참조)
-
-  // 이미지 스타일 변경 시 새 이미지 생성
-  const generateImageWithStyle = useCallback(
-    async (photoData: PhotoData, summaryText: string, style: DiaryImageStyle) => {
-      try {
-        const prompt = buildDiaryPrompt(summaryText, photoData, style);
-        const image = await generateDiaryImage(
-          { style, prompt },
-          photoData
-        );
-        setGeneratedImage(image);
-      } catch (err) {
-        console.error('Failed to generate image:', err);
-      }
-    },
-    []
-  );
+  }, []); // 마운트 시 1회만 실행
 
   // 저장 기능 (TODO: 실제 저장 로직)
   const handleSave = useCallback(() => {
@@ -270,10 +262,10 @@ export default function ReminiscenceResultPage() {
         {generatedImage?.isPlaceholder && (
           <div className="mt-8 text-center">
             <p className="text-sm text-muted-foreground">
-              💡 현재는 플레이스홀더 이미지가 표시됩니다.
+              💡 현재는 원본 사진이 표시됩니다.
               <br />
               <span className="text-xs">
-                TODO: [IMAGE_API] 실제 이미지 생성 API 연동 시 AI 생성 이미지로 대체됩니다.
+                AI 이미지 생성을 위해 GEMINI_API_KEY가 필요합니다.
               </span>
             </p>
           </div>
