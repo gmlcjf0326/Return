@@ -8,7 +8,7 @@ import { Button, Card } from '@/components/ui';
 
 // 동적 import로 초기 번들 크기 최적화 (566줄 컴포넌트)
 const VoiceTraining = dynamic(
-  () => import('@/components/training/VoiceTraining').then(mod => mod.VoiceTraining),
+  () => import('@/components/training/VoiceTraining').then(mod => mod.default),
   {
     ssr: false,
     loading: () => (
