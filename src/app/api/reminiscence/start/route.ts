@@ -168,12 +168,10 @@ function generateGreeting(
   };
 
   const categoryGreetings = greetings[category] || greetings.daily;
-  let greeting = categoryGreetings[Math.floor(Math.random() * categoryGreetings.length)];
+  const greeting = categoryGreetings[Math.floor(Math.random() * categoryGreetings.length)];
 
-  // AI 분석 정보가 있으면 추가
-  if (autoTags?.description) {
-    greeting += `\n\n${autoTags.description}`;
-  }
+  // AI 분석 정보(description)는 AI 컨텍스트로만 사용하고, 사용자에게 직접 표시하지 않음
+  // 기술적인 설명(픽셀 아트, 이미지 스타일 등)이 포함될 수 있어 제거
 
   return greeting;
 }

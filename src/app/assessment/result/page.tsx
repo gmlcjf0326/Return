@@ -11,6 +11,7 @@ import {
   analyzeStrongAreas,
   getTrainingRecommendations,
   type QuestionResponse,
+  type RiskLevel,
 } from '@/lib/scoring';
 import { categoryConfig } from '@/data/assessment-questions';
 import type { CognitiveCategory } from '@/data/assessment-questions';
@@ -79,7 +80,7 @@ interface TransformedResult {
   totalScore: number;
   maxScore: number;
   percentage: number;
-  riskLevel: 'normal' | 'mild_caution' | 'mci_suspected' | 'consultation_recommended';
+  riskLevel: RiskLevel;
   categoryScores: Array<{
     category: CognitiveCategory;
     name: string;
@@ -123,10 +124,20 @@ function transformDbData(assessment: {
     averageResponseTime: 0,
   }));
 
-  const validRiskLevels = ['normal', 'mild_caution', 'mci_suspected', 'consultation_recommended'] as const;
-  const riskLevel = validRiskLevels.includes(assessment.riskLevel as typeof validRiskLevels[number])
-    ? (assessment.riskLevel as TransformedResult['riskLevel'])
-    : 'normal';
+  // 새 위험도 레벨 + 이전 값 호환 매핑
+  const riskLevelMapping: Record<string, RiskLevel> = {
+    // 새 값
+    excellent: 'excellent',
+    mild_caution: 'mild_caution',
+    caution: 'caution',
+    severe: 'severe',
+    // 이전 값 호환
+    normal: 'excellent',
+    mci_suspected: 'caution',
+    consultation_recommended: 'severe',
+  };
+
+  const riskLevel: RiskLevel = riskLevelMapping[assessment.riskLevel || ''] || 'mild_caution';
 
   return {
     totalScore: assessment.totalScore || 0,
@@ -151,6 +162,8 @@ function AssessmentResultContent() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showBehaviorSection, setShowBehaviorSection] = useState(true);
   const hasSavedRef = useRef(false);
+  // 컴포넌트 마운트 시점의 종료 시간을 lazy initializer로 캡처 (순수 함수 규칙 준수)
+  const [endTime] = useState(() => Date.now());
 
   // DB 결과 로딩 상태
   const [dbResult, setDbResult] = useState<TransformedResult | null>(null);
@@ -233,8 +246,8 @@ function AssessmentResultContent() {
       maxPoints: 3,
     }));
 
-    return calculateAssessmentResult(questionResponses, startTime, Date.now());
-  }, [responses, startTime]);
+    return calculateAssessmentResult(questionResponses, startTime, endTime);
+  }, [responses, startTime, endTime]);
 
   // 행동 데이터 계산
   const behaviorData: BehaviorDataType | null = useMemo(() => {
@@ -287,7 +300,10 @@ function AssessmentResultContent() {
   }, [responses, dbBehaviorData]);
 
   // 결과 서버에 저장 (한 번만 실행)
+  // recordId가 있으면 이미 저장된 결과를 보는 것이므로 저장하지 않음
   useEffect(() => {
+    if (recordId) return; // 히스토리에서 보는 경우 저장 안 함
+    if (!isCompleted || !startTime) return; // 미완료 상태에서 방문한 경우 저장 안 함
     if (result && sessionId && !hasSavedRef.current) {
       hasSavedRef.current = true;
       setIsSaving(true);
@@ -325,7 +341,7 @@ function AssessmentResultContent() {
           setIsSaving(false);
         });
     }
-  }, [result, sessionId, behaviorData]);
+  }, [recordId, result, sessionId, isCompleted, startTime, behaviorData]);
 
   // 최종 결과 데이터 (DB 결과 우선)
   const displayResult = dbResult || result;
@@ -403,11 +419,11 @@ function AssessmentResultContent() {
   const recommendations = getTrainingRecommendations(displayResult.categoryScores);
 
   // 위험도별 색상
-  const riskColors = {
-    normal: 'bg-[var(--success)] text-white',
+  const riskColors: Record<RiskLevel, string> = {
+    excellent: 'bg-[var(--success)] text-white',
     mild_caution: 'bg-[var(--warning)] text-white',
-    mci_suspected: 'bg-orange-500 text-white',
-    consultation_recommended: 'bg-[var(--danger)] text-white',
+    caution: 'bg-orange-500 text-white',
+    severe: 'bg-[var(--danger)] text-white',
   };
 
   return (
@@ -452,10 +468,10 @@ function AssessmentResultContent() {
               className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-lg font-semibold ${riskColors[displayResult.riskLevel]}`}
             >
               <span className="text-2xl">
-                {displayResult.riskLevel === 'normal' && '✓'}
+                {displayResult.riskLevel === 'excellent' && '✓'}
                 {displayResult.riskLevel === 'mild_caution' && '⚠'}
-                {displayResult.riskLevel === 'mci_suspected' && '⚠'}
-                {displayResult.riskLevel === 'consultation_recommended' && '!'}
+                {displayResult.riskLevel === 'caution' && '⚠'}
+                {displayResult.riskLevel === 'severe' && '!'}
               </span>
               {riskConfig.label}
             </div>

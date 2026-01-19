@@ -41,21 +41,30 @@ export default function ReminiscenceResultPage() {
   const selectedStyle: DiaryImageStyle = DEFAULT_DIARY_STYLE;
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [imageProgress, setImageProgress] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
 
   // 세션 스토리지에서 대화 데이터 로드
   useEffect(() => {
     const loadConversationData = async () => {
       try {
+        setImageProgress(0);
+        setProgressMessage('대화 데이터 불러오는 중...');
+
         const stored = sessionStorage.getItem('reminiscence-result');
         if (!stored) {
           setError('대화 데이터를 찾을 수 없습니다.');
           return;
         }
 
+        setImageProgress(20);
         const data: ConversationData = JSON.parse(stored);
         setConversationData(data);
 
         // 대화 요약 생성
+        setProgressMessage('AI가 대화를 분석하고 있어요...');
+        setImageProgress(40);
+
         const messages = data.messages.map(m => ({
           role: m.role as 'user' | 'assistant',
           content: m.content,
@@ -64,8 +73,14 @@ export default function ReminiscenceResultPage() {
         const summaryText = await generateConversationSummary(data.photoData, messages);
         setSummary(summaryText);
 
+        setImageProgress(60);
+        setProgressMessage('그림일기를 그리고 있어요...');
+
         // 이미지 생성 (플레이스홀더)
         await generateImageWithStyle(data.photoData, summaryText, selectedStyle);
+
+        setImageProgress(100);
+        setProgressMessage('완료!');
       } catch (err) {
         console.error('Failed to load conversation data:', err);
         setError('결과를 불러오는 중 오류가 발생했습니다.');
@@ -75,7 +90,8 @@ export default function ReminiscenceResultPage() {
     };
 
     loadConversationData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 마운트 시 1회만 실행 (generateImageWithStyle, selectedStyle는 안정적인 참조)
 
   // 이미지 스타일 변경 시 새 이미지 생성
   const generateImageWithStyle = useCallback(
@@ -122,10 +138,19 @@ export default function ReminiscenceResultPage() {
   // 로딩 중
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50 flex items-center justify-center p-4">
+        <div className="text-center max-w-sm w-full">
           <div className="text-6xl mb-4 animate-bounce">🎨</div>
-          <p className="text-lg text-amber-800">그림일기를 만들고 있어요...</p>
+          <p className="text-lg text-amber-800 mb-4">{progressMessage || '그림일기를 만들고 있어요...'}</p>
+
+          {/* 진행률 바 */}
+          <div className="w-full h-3 bg-amber-200 rounded-full overflow-hidden mb-2">
+            <div
+              className="h-full bg-gradient-to-r from-amber-400 to-orange-400 rounded-full transition-all duration-500"
+              style={{ width: `${imageProgress}%` }}
+            />
+          </div>
+          <p className="text-sm text-amber-600">{imageProgress}%</p>
         </div>
       </div>
     );

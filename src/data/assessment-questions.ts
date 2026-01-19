@@ -96,11 +96,11 @@ const memoryQuestions: AssessmentQuestion[] = [
     type: 'recall',
     difficulty: 1,
     question: '다음 단어들을 기억하고 똑같이 따라 적어주세요: 사과, 자동차, 연필',
-    instruction: '위의 세 단어를 쉼표(,)로 구분하여 순서대로 입력해주세요. 예: 사과, 자동차, 연필',
+    instruction: '세 단어를 쉼표(,)로 구분하여 입력해주세요.\n예시: 사과, 자동차, 연필',
     correctAnswer: ['사과', '자동차', '연필'],
     timeLimit: 30,
     points: 4,
-    hint: '세 단어를 쉼표로 구분하여 입력하세요.',
+    hint: '세 단어를 쉼표로 구분하여 입력하세요. (예: 사과, 자동차, 연필)',
   },
   {
     id: 'memory-2',
@@ -143,11 +143,12 @@ const memoryQuestions: AssessmentQuestion[] = [
     category: 'memory',
     type: 'recall',
     difficulty: 3,
-    question: '다음 문장을 기억해주세요: "오늘 아침 공원에서 강아지가 뛰어놀았습니다."',
-    instruction: '잠시 후 이 문장에 대해 질문할 것입니다.',
+    question: '다음 문장을 기억하고 그대로 입력해주세요: "오늘 아침 공원에서 강아지가 뛰어놀았습니다."',
+    instruction: '위 문장을 그대로 입력해주세요. (따옴표 제외)\n예시: 오늘 아침 공원에서 강아지가 뛰어놀았습니다',
     correctAnswer: '오늘 아침 공원에서 강아지가 뛰어놀았습니다',
     timeLimit: 40,
     points: 4,
+    hint: '문장을 그대로 입력해주세요.',
   },
 ];
 

@@ -1,7 +1,20 @@
-// TensorFlow.js 초기화 및 유틸리티
-import * as tf from '@tensorflow/tfjs';
+// TensorFlow.js 초기화 및 유틸리티 (지연 로딩)
 
+// 지연 로딩된 TensorFlow 인스턴스
+let tfInstance: typeof import('@tensorflow/tfjs') | null = null;
 let isInitialized = false;
+let initPromise: Promise<boolean> | null = null;
+
+/**
+ * TensorFlow.js 모듈 지연 로딩
+ * 첫 사용 시에만 500KB+ 라이브러리를 로드
+ */
+async function loadTensorFlow(): Promise<typeof import('@tensorflow/tfjs')> {
+  if (tfInstance) return tfInstance;
+
+  tfInstance = await import('@tensorflow/tfjs');
+  return tfInstance;
+}
 
 /**
  * TensorFlow.js 백엔드 초기화
@@ -10,50 +23,65 @@ let isInitialized = false;
 export async function initTensorFlow(): Promise<boolean> {
   if (isInitialized) return true;
 
-  try {
-    // WebGL 백엔드 시도
-    await tf.setBackend('webgl');
-    await tf.ready();
+  // 중복 초기화 방지
+  if (initPromise) return initPromise;
 
-    console.log('[TensorFlow] Initialized with WebGL backend');
-    isInitialized = true;
-    return true;
-  } catch (webglError) {
-    console.warn('[TensorFlow] WebGL failed, trying CPU:', webglError);
-
+  initPromise = (async () => {
     try {
-      // CPU 백엔드로 폴백
-      await tf.setBackend('cpu');
+      const tf = await loadTensorFlow();
+
+      // WebGL 백엔드 시도
+      await tf.setBackend('webgl');
       await tf.ready();
 
-      console.log('[TensorFlow] Initialized with CPU backend');
+      console.log('[TensorFlow] Initialized with WebGL backend');
       isInitialized = true;
       return true;
-    } catch (cpuError) {
-      console.error('[TensorFlow] Failed to initialize:', cpuError);
-      return false;
+    } catch (webglError) {
+      console.warn('[TensorFlow] WebGL failed, trying CPU:', webglError);
+
+      try {
+        const tf = await loadTensorFlow();
+
+        // CPU 백엔드로 폴백
+        await tf.setBackend('cpu');
+        await tf.ready();
+
+        console.log('[TensorFlow] Initialized with CPU backend');
+        isInitialized = true;
+        return true;
+      } catch (cpuError) {
+        console.error('[TensorFlow] Failed to initialize:', cpuError);
+        initPromise = null;
+        return false;
+      }
     }
-  }
+  })();
+
+  return initPromise;
 }
 
 /**
  * TensorFlow.js 메모리 정리
  */
-export function disposeTensorFlow(): void {
-  tf.disposeVariables();
+export async function disposeTensorFlow(): Promise<void> {
+  if (tfInstance) {
+    tfInstance.disposeVariables();
+  }
 }
 
 /**
  * 현재 메모리 사용량 확인
  */
-export function getMemoryInfo(): tf.MemoryInfo {
-  return tf.memory();
+export async function getMemoryInfo(): Promise<import('@tensorflow/tfjs').MemoryInfo | null> {
+  if (!tfInstance) return null;
+  return tfInstance.memory();
 }
 
 /**
  * 텐서 정리 유틸리티
  */
-export function cleanupTensors(tensors: tf.Tensor[]): void {
+export async function cleanupTensors(tensors: import('@tensorflow/tfjs').Tensor[]): Promise<void> {
   tensors.forEach(tensor => {
     if (tensor && !tensor.isDisposed) {
       tensor.dispose();
@@ -61,4 +89,16 @@ export function cleanupTensors(tensors: tf.Tensor[]): void {
   });
 }
 
-export { tf };
+/**
+ * TensorFlow 인스턴스 가져오기 (이미 로드된 경우만)
+ */
+export function getTf(): typeof import('@tensorflow/tfjs') | null {
+  return tfInstance;
+}
+
+/**
+ * TensorFlow 인스턴스 가져오기 (필요시 로드)
+ */
+export async function getTfAsync(): Promise<typeof import('@tensorflow/tfjs')> {
+  return loadTensorFlow();
+}

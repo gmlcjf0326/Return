@@ -2,9 +2,25 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { VoiceTraining } from '@/components/training';
+import dynamic from 'next/dynamic';
 import { useSessionStore } from '@/store/sessionStore';
 import { Button, Card } from '@/components/ui';
+
+// 동적 import로 초기 번들 크기 최적화 (566줄 컴포넌트)
+const VoiceTraining = dynamic(
+  () => import('@/components/training/VoiceTraining').then(mod => mod.VoiceTraining),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-pink-200 border-t-pink-600 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-600">음성 훈련 모듈 로딩 중...</p>
+        </div>
+      </div>
+    ),
+  }
+);
 
 export default function VoiceTrainingPage() {
   const router = useRouter();

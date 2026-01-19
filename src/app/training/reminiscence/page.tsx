@@ -26,7 +26,7 @@ function ReminiscenceContent() {
 
   const { session, initSession } = useSessionStore();
   const sessionId = session?.id;
-  const { photos, getPhotoById, initializeDummyData } = usePhotoStore();
+  const { photos, getPhotoById } = usePhotoStore();
 
   const [currentPhoto, setCurrentPhoto] = useState<PhotoData | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -50,12 +50,10 @@ function ReminiscenceContent() {
     interests: session?.profileData?.interests,
   }), [session?.nickname, session?.birthYear, session?.profileData?.gender, session?.profileData?.region, session?.profileData?.interests]);
 
-  // 세션 확인 및 더미 데이터 초기화
+  // 세션 확인
   useEffect(() => {
     initSession();
-    // TODO: [REAL_DATA] 실제 데이터 연동 시 제거
-    initializeDummyData();
-  }, [initSession, initializeDummyData]);
+  }, [initSession]);
 
   // 사진 로드 및 관련 사진 찾기
   useEffect(() => {
@@ -228,22 +226,113 @@ function ReminiscenceContent() {
     router.push('/training/reminiscence/result');
   }, [currentPhoto, messages, router]);
 
-  // 사진이 없는 경우
+  // 사진이 없는 경우 - 페이지 내에서 바로 사진 선택
   if (!photoId) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-md w-full p-8 text-center">
-          <div className="text-6xl mb-6">📷</div>
-          <h2 className="text-xl font-bold mb-2">
-            사진을 선택해주세요
-          </h2>
-          <p className="text-muted-foreground mb-6">
-            회상 대화를 시작하려면 먼저 사진을 선택해야 합니다.
-          </p>
-          <Button variant="primary" onClick={() => router.push('/photos')}>
-            사진 선택하러 가기
-          </Button>
-        </Card>
+      <div className="min-h-screen bg-background">
+        {/* 헤더 */}
+        <header className="bg-card border-b sticky top-0 z-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => router.back()}
+                  className="w-9 h-9 rounded-lg bg-[var(--neutral-100)] hover:bg-[var(--neutral-200)] flex items-center justify-center transition-colors"
+                  aria-label="뒤로 가기"
+                >
+                  <svg className="w-5 h-5 text-[var(--neutral-600)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div>
+                  <h1 className="text-xl font-bold">회상 대화</h1>
+                  <p className="text-sm text-muted-foreground">
+                    추억이 담긴 사진을 선택해주세요
+                  </p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
+                홈으로
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {/* 사진 선택 영역 */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {photos.length === 0 ? (
+            /* 사진이 없는 경우 */
+            <Card className="max-w-md mx-auto p-8 text-center">
+              <div className="text-6xl mb-6">📷</div>
+              <h2 className="text-xl font-bold mb-2">
+                등록된 사진이 없습니다
+              </h2>
+              <p className="text-muted-foreground mb-6">
+                먼저 사진을 업로드해주세요.
+              </p>
+              <Button variant="primary" onClick={() => router.push('/photos')}>
+                사진 업로드하러 가기
+              </Button>
+            </Card>
+          ) : (
+            /* 사진 그리드 */
+            <div>
+              <div className="mb-6 text-center">
+                <p className="text-lg text-[var(--neutral-700)]">
+                  회상 대화를 시작할 사진을 선택해주세요
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+                {photos.map((photo) => (
+                  <button
+                    key={photo.id}
+                    onClick={() => router.push(`/training/reminiscence?photoId=${photo.id}`)}
+                    className="group relative aspect-square rounded-xl overflow-hidden bg-muted hover:ring-4 hover:ring-primary/50 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-primary"
+                  >
+                    <Image
+                      src={photo.fileUrl}
+                      alt={photo.fileName}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-200"
+                    />
+                    {/* 호버 오버레이 */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                      <span className="text-white text-2xl opacity-0 group-hover:opacity-100 transition-opacity">
+                        💬
+                      </span>
+                    </div>
+                    {/* 카테고리 태그 */}
+                    {photo.category && (
+                      <div
+                        className="absolute bottom-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                        style={{ backgroundColor: getCategoryColor(photo.category) }}
+                      >
+                        {getCategoryIcon(photo.category)} {getCategoryLabel(photo.category)}
+                      </div>
+                    )}
+                    {/* 날짜 */}
+                    {photo.takenDate && (
+                      <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                        {formatPhotoDate(photo.takenDate)}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* 추가 안내 */}
+              <div className="mt-8 text-center">
+                <p className="text-sm text-muted-foreground mb-3">
+                  더 많은 사진을 추가하고 싶으신가요?
+                </p>
+                <Button variant="outline" size="sm" onClick={() => router.push('/photos')}>
+                  사진 관리 페이지로 이동
+                </Button>
+              </div>
+            </div>
+          )}
+        </main>
       </div>
     );
   }

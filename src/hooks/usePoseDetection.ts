@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { initTensorFlow } from '@/lib/ai/tensorflow';
-import * as poseDetection from '@tensorflow-models/pose-detection';
-import * as handPoseDetection from '@tensorflow-models/hand-pose-detection';
-import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
+
+// 타입만 import (런타임 번들에 포함되지 않음)
+import type * as poseDetectionTypes from '@tensorflow-models/pose-detection';
+import type * as handPoseDetectionTypes from '@tensorflow-models/hand-pose-detection';
+import type * as faceLandmarksDetectionTypes from '@tensorflow-models/face-landmarks-detection';
 
 // 키포인트 타입
 export interface Keypoint {
@@ -28,13 +30,10 @@ export interface FaceKeypoint {
   name?: string;
 }
 
-// 자세 타입
-export type PostureType =
-  | 'upright'     // 바른 자세
-  | 'leaning_left'  // 왼쪽으로 기울어짐
-  | 'leaning_right' // 오른쪽으로 기울어짐
-  | 'slouching'   // 구부정한 자세
-  | 'unknown';    // 감지 불가
+// 자세 타입 및 상수 (constants 파일에서 re-export)
+export type { PostureType } from '@/lib/constants/poseConstants';
+export { postureLabels, postureIcons, postureColors } from '@/lib/constants/poseConstants';
+import type { PostureType } from '@/lib/constants/poseConstants';
 
 // 자세 기록
 export interface PostureRecord {
@@ -186,9 +185,9 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const detectorRef = useRef<poseDetection.PoseDetector | null>(null);
-  const handDetectorRef = useRef<handPoseDetection.HandDetector | null>(null);
-  const faceDetectorRef = useRef<faceLandmarksDetection.FaceLandmarksDetector | null>(null);
+  const detectorRef = useRef<poseDetectionTypes.PoseDetector | null>(null);
+  const handDetectorRef = useRef<handPoseDetectionTypes.HandDetector | null>(null);
+  const faceDetectorRef = useRef<faceLandmarksDetectionTypes.FaceLandmarksDetector | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const currentQuestionIndexRef = useRef<number>(0);
 
@@ -207,11 +206,7 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
         audio: false,
       });
 
-      const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        const settings = videoTrack.getSettings();
-        console.log('[PoseDetection] Video track settings:', settings);
-      }
+      // Video track is ready
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -221,8 +216,7 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
 
       streamRef.current = stream;
       return true;
-    } catch (error) {
-      console.error('[PoseDetection] Webcam access denied:', error);
+    } catch {
       return false;
     }
   }, []);
@@ -238,35 +232,35 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     }
   }, []);
 
-  // MoveNet 모델 초기화
+  // MoveNet 모델 초기화 (지연 로딩)
   const initDetector = useCallback(async (): Promise<boolean> => {
     try {
-      console.log('[PoseDetection] Initializing MoveNet detector...');
-
+      // 동적 import로 번들 크기 최적화
+      const poseDetection = await import('@tensorflow-models/pose-detection');
       const detector = await poseDetection.createDetector(
         poseDetection.SupportedModels.MoveNet,
         {
-          modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+          // THUNDER 모델: 더 정확한 키포인트 감지 (LIGHTNING보다 느리지만 정확도 높음)
+          modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER,
           enableSmoothing: true,
+          minPoseScore: 0.4, // 노이즈 감소를 위해 임계값 상향 (0.2 → 0.4)
         }
       );
 
       detectorRef.current = detector;
-      console.log('[PoseDetection] MoveNet detector initialized');
       return true;
-    } catch (error) {
-      console.error('[PoseDetection] Failed to initialize detector:', error);
+    } catch {
       return false;
     }
   }, []);
 
-  // MediaPipe Hands 모델 초기화
+  // MediaPipe Hands 모델 초기화 (지연 로딩)
   const initHandDetector = useCallback(async (): Promise<boolean> => {
     if (!enableHandDetection) return true;
 
     try {
-      console.log('[PoseDetection] Initializing Hand detector...');
-
+      // 동적 import로 번들 크기 최적화
+      const handPoseDetection = await import('@tensorflow-models/hand-pose-detection');
       const detector = await handPoseDetection.createDetector(
         handPoseDetection.SupportedModels.MediaPipeHands,
         {
@@ -276,35 +270,31 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
       );
 
       handDetectorRef.current = detector;
-      console.log('[PoseDetection] Hand detector initialized');
       return true;
-    } catch (error) {
-      console.error('[PoseDetection] Failed to initialize hand detector:', error);
+    } catch {
       return false;
     }
   }, [enableHandDetection]);
 
-  // MediaPipe FaceMesh 모델 초기화
+  // MediaPipe FaceMesh 모델 초기화 (지연 로딩)
   const initFaceDetector = useCallback(async (): Promise<boolean> => {
     if (!enableFaceDetection) return true;
 
     try {
-      console.log('[PoseDetection] Initializing Face detector...');
-
+      // 동적 import로 번들 크기 최적화
+      const faceLandmarksDetection = await import('@tensorflow-models/face-landmarks-detection');
       const detector = await faceLandmarksDetection.createDetector(
         faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh,
         {
           runtime: 'tfjs',
           maxFaces: 1,
-          refineLandmarks: false,
+          refineLandmarks: true, // 얼굴 정제 활성화 (false → true)
         }
       );
 
       faceDetectorRef.current = detector;
-      console.log('[PoseDetection] Face detector initialized');
       return true;
-    } catch (error) {
-      console.error('[PoseDetection] Failed to initialize face detector:', error);
+    } catch {
       return false;
     }
   }, [enableFaceDetection]);
@@ -350,106 +340,109 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     }
   }, []);
 
-  // 얼굴 랜드마크 그리기 (윤곽선, 눈, 입술, 눈썹, 코, 눈동자)
+  // 얼굴 랜드마크 그리기 (네모 박스 + 키포인트 점)
   const drawFaceLandmarks = useCallback((
     ctx: CanvasRenderingContext2D,
     faceKps: FaceKeypoint[]
   ) => {
     if (faceKps.length === 0) return;
 
-    // 연결선 그리기 함수
-    const drawContour = (indices: number[], color: string, close = true, lineWidth = 1.5) => {
-      if (indices.length < 2) return;
+    // 1. 얼굴 바운딩 박스 계산
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidth;
+    for (const kp of faceKps) {
+      if (kp.x < minX) minX = kp.x;
+      if (kp.y < minY) minY = kp.y;
+      if (kp.x > maxX) maxX = kp.x;
+      if (kp.y > maxY) maxY = kp.y;
+    }
+
+    // 패딩 추가
+    const padding = 15;
+    minX -= padding;
+    minY -= padding;
+    maxX += padding;
+    maxY += padding;
+
+    // 바운딩 박스 그리기 (초록색 테두리, 실선)
+    ctx.strokeStyle = '#00FF00';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+
+    // "얼굴 인식" 라벨 추가
+    ctx.fillStyle = '#00FF00';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('얼굴 인식', minX, minY - 5);
+
+    // 2. 주요 키포인트만 점으로 표시
+
+    // 점 그리기 함수 (크기 확대: 가시성 향상)
+    const drawPoint = (x: number, y: number, color: string, size: number = 5) => {
       ctx.beginPath();
-
-      const firstKp = faceKps[indices[0]];
-      if (firstKp) {
-        ctx.moveTo(firstKp.x, firstKp.y);
-      }
-
-      for (let i = 1; i < indices.length; i++) {
-        const kp = faceKps[indices[i]];
-        if (kp) {
-          ctx.lineTo(kp.x, kp.y);
-        }
-      }
-
-      if (close) {
-        ctx.closePath();
-      }
+      ctx.arc(x, y, size, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+      // 테두리 추가로 가시성 향상
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1;
       ctx.stroke();
     };
 
-    // 원 그리기 함수 (눈동자용)
-    const drawIris = (indices: number[], color: string) => {
-      if (indices.length === 0) return;
-
-      // 눈동자 중심점 계산
-      let centerX = 0;
-      let centerY = 0;
-      let count = 0;
-
+    // 중심점 계산 함수
+    const getCenterPoint = (indices: number[]): { x: number; y: number } | null => {
+      let sumX = 0, sumY = 0, count = 0;
       for (const idx of indices) {
         const kp = faceKps[idx];
         if (kp) {
-          centerX += kp.x;
-          centerY += kp.y;
+          sumX += kp.x;
+          sumY += kp.y;
           count++;
         }
       }
-
-      if (count > 0) {
-        centerX /= count;
-        centerY /= count;
-
-        // 눈동자 원 그리기
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
-        ctx.fillStyle = color;
-        ctx.fill();
-
-        // 하이라이트
-        ctx.beginPath();
-        ctx.arc(centerX - 1, centerY - 1, 1.5, 0, 2 * Math.PI);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fill();
-      }
+      return count > 0 ? { x: sumX / count, y: sumY / count } : null;
     };
 
-    // 얼굴 윤곽선 (하얀색)
-    drawContour(FACE_OVAL_INDICES, '#FFFFFF', true, 2);
-
-    // 왼쪽 눈 (하늘색)
-    drawContour(LEFT_EYE_INDICES, '#87CEEB', true, 2);
-
-    // 오른쪽 눈 (하늘색)
-    drawContour(RIGHT_EYE_INDICES, '#87CEEB', true, 2);
-
-    // 눈동자 (검은색 with 하이라이트) - refineLandmarks가 false여도 안전하게 처리
-    if (faceKps.length > 472) {
-      drawIris(LEFT_IRIS_INDICES, '#1a1a1a');
-    }
-    if (faceKps.length > 477) {
-      drawIris(RIGHT_IRIS_INDICES, '#1a1a1a');
+    // 왼쪽 눈 중심 (하늘색) - 크기 확대
+    const leftEyeCenter = getCenterPoint(LEFT_EYE_INDICES);
+    if (leftEyeCenter) {
+      drawPoint(leftEyeCenter.x, leftEyeCenter.y, '#87CEEB', 8);
     }
 
-    // 입술 (핑크색) - 두께 증가
-    drawContour(LIPS_OUTER_INDICES, '#FFB6C1', true, 2);
+    // 오른쪽 눈 중심 (하늘색) - 크기 확대
+    const rightEyeCenter = getCenterPoint(RIGHT_EYE_INDICES);
+    if (rightEyeCenter) {
+      drawPoint(rightEyeCenter.x, rightEyeCenter.y, '#87CEEB', 8);
+    }
 
-    // 왼쪽 눈썹 (연보라색)
-    drawContour(LEFT_EYEBROW_INDICES, '#DDA0DD', false, 2);
+    // 코끝 (연두색) - 인덱스 1번이 코끝 - 크기 확대
+    const noseTip = faceKps[1];
+    if (noseTip) {
+      drawPoint(noseTip.x, noseTip.y, '#90EE90', 7);
+    }
 
-    // 오른쪽 눈썹 (연보라색)
-    drawContour(RIGHT_EYEBROW_INDICES, '#DDA0DD', false, 2);
+    // 입술 중심 (핑크색) - 크기 확대
+    const mouthCenter = getCenterPoint(LIPS_OUTER_INDICES);
+    if (mouthCenter) {
+      drawPoint(mouthCenter.x, mouthCenter.y, '#FFB6C1', 8);
+    }
 
-    // 코 중심선 (연두색)
-    drawContour(NOSE_BRIDGE_INDICES, '#90EE90', false, 2);
+    // 왼쪽 눈썹 중심 (연보라색) - 크기 확대
+    const leftEyebrowCenter = getCenterPoint(LEFT_EYEBROW_INDICES);
+    if (leftEyebrowCenter) {
+      drawPoint(leftEyebrowCenter.x, leftEyebrowCenter.y, '#DDA0DD', 5);
+    }
 
-    // 코끝 (연두색)
-    drawContour(NOSE_TIP_INDICES, '#90EE90', false, 2);
+    // 오른쪽 눈썹 중심 (연보라색) - 크기 확대
+    const rightEyebrowCenter = getCenterPoint(RIGHT_EYEBROW_INDICES);
+    if (rightEyebrowCenter) {
+      drawPoint(rightEyebrowCenter.x, rightEyebrowCenter.y, '#DDA0DD', 5);
+    }
+
+    // 얼굴 윤곽 대표점 (턱 중앙 - 인덱스 152) - 크기 확대
+    const chin = faceKps[152];
+    if (chin) {
+      drawPoint(chin.x, chin.y, '#FFFFFF', 5);
+    }
   }, []);
 
   // 키포인트를 캔버스에 그리기
@@ -483,7 +476,7 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
         const start = keypoints[startIdx];
         const end = keypoints[endIdx];
 
-        if (start && end && (start.score || 0) > 0.3 && (end.score || 0) > 0.3) {
+        if (start && end && (start.score || 0) > 0.4 && (end.score || 0) > 0.4) {
           // 상체 연결선은 더 두껍게
           const isUpperBodyConnection = UPPER_BODY_INDICES.includes(startIdx) && UPPER_BODY_INDICES.includes(endIdx);
           ctx.lineWidth = isUpperBodyConnection ? 5 : 3;
@@ -499,7 +492,7 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
 
       // 신체 키포인트 그리기 (원) - 상체 강조
       keypoints.forEach((kp, idx) => {
-        if ((kp.score || 0) > 0.3) {
+        if ((kp.score || 0) > 0.4) {
           const isUpperBody = UPPER_BODY_INDICES.includes(idx);
           // 상체: 큰 원 (12/7), 하체: 작은 원 (7/4) + 반투명
           const outerRadius = isUpperBody ? 12 : 7;
@@ -540,7 +533,7 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
     const rightShoulder = kps[6];
 
     if (!leftShoulder || !rightShoulder ||
-        (leftShoulder.score || 0) < 0.3 || (rightShoulder.score || 0) < 0.3) {
+        (leftShoulder.score || 0) < 0.4 || (rightShoulder.score || 0) < 0.4) {
       return { posture: 'unknown', angle: 0 };
     }
 
@@ -668,8 +661,8 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
           setFaceKeypoints([]);
         }
       }
-    } catch (error) {
-      console.error('[PoseDetection] Detection error:', error);
+    } catch {
+      // Detection error - continue to next frame
     }
 
     // 다음 프레임 예약
@@ -700,49 +693,45 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
         return false;
       }
 
-      // 비디오가 로드되고 dimension이 유효할 때까지 대기
-      await new Promise<void>((resolve, reject) => {
-        if (!videoRef.current) {
+      // 비디오가 로드되고 dimension이 유효할 때까지 대기 (이벤트 기반)
+      await new Promise<void>((resolve) => {
+        const video = videoRef.current;
+        if (!video) {
           resolve();
           return;
         }
 
-        const checkReady = () => {
-          if (videoRef.current &&
-              videoRef.current.readyState >= 2 &&
-              videoRef.current.videoWidth > 0 &&
-              videoRef.current.videoHeight > 0) {
-            resolve();
-          } else {
-            requestAnimationFrame(checkReady);
-          }
-        };
-
-        checkReady();
-
-        // 타임아웃 추가 (10초)
-        setTimeout(() => {
-          console.warn('[PoseDetection] Video initialization timeout, proceeding anyway');
+        // 이미 준비된 경우
+        if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
           resolve();
-        }, 10000);
+          return;
+        }
+
+        // 이벤트 리스너로 대기 (loadeddata 이벤트 사용)
+        const onLoadedData = () => {
+          video.removeEventListener('loadeddata', onLoadedData);
+          resolve();
+        };
+        video.addEventListener('loadeddata', onLoadedData);
+
+        // 타임아웃 (5초로 단축)
+        setTimeout(() => {
+          video.removeEventListener('loadeddata', onLoadedData);
+          resolve();
+        }, 5000);
       });
 
-      // 모든 감지기 초기화 (병렬 실행)
-      const [poseInitialized, handInitialized, faceInitialized] = await Promise.all([
-        initDetector(),
-        initHandDetector(),
-        initFaceDetector(),
-      ]);
+      // 필요한 감지기만 초기화 (선택적 로딩)
+      const loadPromises: Promise<boolean>[] = [initDetector()];
 
-      if (!poseInitialized) {
-        console.warn('[PoseDetection] Pose detector using simulation mode');
+      if (enableHandDetection) {
+        loadPromises.push(initHandDetector());
       }
-      if (!handInitialized) {
-        console.warn('[PoseDetection] Hand detector failed to initialize');
+      if (enableFaceDetection) {
+        loadPromises.push(initFaceDetector());
       }
-      if (!faceInitialized) {
-        console.warn('[PoseDetection] Face detector failed to initialize');
-      }
+
+      await Promise.all(loadPromises);
 
       setIsActive(true);
       setIsLoading(false);
@@ -751,12 +740,11 @@ export function usePoseDetection(options: UsePoseDetectionOptions = {}): UsePose
       animationFrameRef.current = requestAnimationFrame(detectPose);
 
       return true;
-    } catch (error) {
-      console.error('[PoseDetection] Failed to start:', error);
+    } catch {
       setIsLoading(false);
       return false;
     }
-  }, [startWebcam, initDetector, initHandDetector, initFaceDetector, detectPose]);
+  }, [startWebcam, initDetector, initHandDetector, initFaceDetector, detectPose, enableHandDetection, enableFaceDetection]);
 
   // 감지 중지
   const stopDetection = useCallback(() => {
@@ -918,32 +906,7 @@ function calculatePostureStats(timeline: PostureRecord[]): PostureStats {
   };
 }
 
-// 자세 이름 한글화
-export const postureLabels: Record<PostureType, string> = {
-  upright: '바른 자세',
-  leaning_left: '왼쪽 기울임',
-  leaning_right: '오른쪽 기울임',
-  slouching: '구부정함',
-  unknown: '감지 불가',
-};
-
-// 자세 아이콘
-export const postureIcons: Record<PostureType, string> = {
-  upright: '🧘',
-  leaning_left: '↖️',
-  leaning_right: '↗️',
-  slouching: '🪑',
-  unknown: '❓',
-};
-
-// 자세 색상
-export const postureColors: Record<PostureType, string> = {
-  upright: '#10B981',
-  leaning_left: '#F59E0B',
-  leaning_right: '#F59E0B',
-  slouching: '#EF4444',
-  unknown: '#6B7280',
-};
+// 자세 상수는 '@/lib/constants/poseConstants'에서 re-export됨
 
 // 목표 자세 정의
 export interface TargetPose {

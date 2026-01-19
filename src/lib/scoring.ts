@@ -42,7 +42,7 @@ export interface AssessmentResult {
 }
 
 // 위험도 레벨
-export type RiskLevel = 'normal' | 'mild_caution' | 'mci_suspected' | 'consultation_recommended';
+export type RiskLevel = 'excellent' | 'mild_caution' | 'caution' | 'severe';
 
 // 위험도 설정
 export const riskLevelConfig: Record<RiskLevel, {
@@ -52,33 +52,33 @@ export const riskLevelConfig: Record<RiskLevel, {
   minScore: number;
   maxScore: number;
 }> = {
-  normal: {
-    label: '정상',
-    description: '현재 인지 기능이 양호한 상태입니다. 건강한 생활습관을 유지하세요.',
+  excellent: {
+    label: '우수',
+    description: '현재 인지 기능이 우수한 상태입니다. 건강한 생활습관을 유지하세요.',
     color: 'success',
-    minScore: 85,
+    minScore: 80,
     maxScore: 100,
   },
   mild_caution: {
     label: '경도 주의',
     description: '일부 영역에서 주의가 필요합니다. 정기적인 인지 훈련을 권장합니다.',
     color: 'warning',
-    minScore: 70,
-    maxScore: 84,
+    minScore: 60,
+    maxScore: 79,
   },
-  mci_suspected: {
-    label: 'MCI 의심',
-    description: '경도인지장애가 의심됩니다. 전문 의료기관 상담을 권장합니다.',
+  caution: {
+    label: '주의',
+    description: '인지 기능 저하가 관찰됩니다. 전문 의료기관 상담을 권장합니다.',
     color: 'caution',
-    minScore: 55,
-    maxScore: 69,
+    minScore: 50,
+    maxScore: 59,
   },
-  consultation_recommended: {
-    label: '전문 상담 권장',
-    description: '인지 기능 저하가 관찰됩니다. 가능한 빨리 전문 의료기관 상담을 받으세요.',
+  severe: {
+    label: '심각',
+    description: '인지 기능 저하가 심각합니다. 가능한 빨리 전문 의료기관 상담을 받으세요.',
     color: 'danger',
     minScore: 0,
-    maxScore: 54,
+    maxScore: 49,
   },
 };
 
@@ -191,10 +191,10 @@ export function calculateCategoryScore(
  * 위험도 레벨 판정
  */
 export function determineRiskLevel(percentage: number): RiskLevel {
-  if (percentage >= 85) return 'normal';
-  if (percentage >= 70) return 'mild_caution';
-  if (percentage >= 55) return 'mci_suspected';
-  return 'consultation_recommended';
+  if (percentage >= 80) return 'excellent';
+  if (percentage >= 60) return 'mild_caution';
+  if (percentage >= 50) return 'caution';
+  return 'severe';
 }
 
 /**

@@ -44,10 +44,10 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const sizes = {
-      sm: 'min-h-[40px] px-4 text-sm',
-      md: 'min-h-[48px] px-5 text-base',
-      lg: 'min-h-[56px] px-6 text-lg',
-      xl: 'min-h-[64px] px-8 text-xl',
+      sm: 'min-h-[44px] sm:min-h-[48px] px-3 sm:px-4 text-sm',
+      md: 'min-h-[48px] sm:min-h-[52px] px-4 sm:px-5 text-sm sm:text-base',
+      lg: 'min-h-[52px] sm:min-h-[56px] px-5 sm:px-6 text-base sm:text-lg',
+      xl: 'min-h-[56px] sm:min-h-[64px] px-6 sm:px-8 text-lg sm:text-xl',
     };
 
     const isDisabled = disabled || isLoading;

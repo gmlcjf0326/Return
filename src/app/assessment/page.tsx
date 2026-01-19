@@ -54,6 +54,8 @@ export default function AssessmentPage() {
   const [showCameraPrompt, setShowCameraPrompt] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState('');
 
   // 입력 필드 참조 (자동 포커스용)
   const inputRef = useRef<HTMLInputElement>(null);
@@ -98,10 +100,28 @@ export default function AssessmentPage() {
   // 카메라 활성화 후 시작
   const handleStartWithCamera = useCallback(async () => {
     setCameraEnabled(true);
+    setLoadingProgress(0);
+    setLoadingMessage('카메라 연결 중...');
+
+    // 진행률 애니메이션
+    setLoadingProgress(20);
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    setLoadingMessage('AI 모델 준비 중...');
+    setLoadingProgress(40);
+
     const started = await startDetection();
+
+    setLoadingProgress(80);
+    setLoadingMessage('거의 완료...');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    setLoadingProgress(100);
+    setLoadingMessage('준비 완료!');
+    await new Promise(resolve => setTimeout(resolve, 200));
+
     if (!started) {
       // 카메라 권한 거부되어도 진행 가능
-      console.log('[Assessment] Camera permission denied, continuing without camera');
     }
     doStartAssessment();
   }, [startDetection, doStartAssessment]);
@@ -111,13 +131,35 @@ export default function AssessmentPage() {
     doStartAssessment();
   }, [doStartAssessment]);
 
-  // 답변 변경
+  // 답변 변경 - 수정 기록 개선
+  // 객관식 선택 변경만 카운트 (텍스트 입력은 수정으로 카운트하지 않음)
   const handleAnswerChange = useCallback(
     (value: string | string[] | number) => {
-      // 이전 답변이 있으면 수정으로 기록
-      if (currentAnswer !== null && currentAnswer !== value) {
-        recordCorrection();
+      if (currentAnswer !== null) {
+        const isCorrection = (() => {
+          // 텍스트 입력: 수정 카운트 안 함 (타이핑/백스페이스 모두 제외)
+          if (typeof currentAnswer === 'string' && typeof value === 'string') {
+            return false;
+          }
+
+          // 배열 타입 (multiSelect): 항목 제거만 카운트
+          if (Array.isArray(currentAnswer) && Array.isArray(value)) {
+            return value.length < currentAnswer.length;
+          }
+
+          // 숫자 타입 (단일 객관식): 선택 변경만 카운트
+          if (typeof currentAnswer === 'number' && typeof value === 'number') {
+            return true;
+          }
+
+          return false;
+        })();
+
+        if (isCorrection) {
+          recordCorrection();
+        }
       }
+
       setCurrentAnswer(value);
     },
     [currentAnswer, recordCorrection]
@@ -189,19 +231,33 @@ export default function AssessmentPage() {
   }, [currentOriginalQuestion, submitResponse, nextQuestion]);
 
   // 진단 완료 시 결과 페이지로 이동
+  // isStarted도 체크하여 현재 세션에서 시작된 평가인 경우에만 리다이렉트
   useEffect(() => {
-    if (isCompleted && startTime && !isNavigating) {
+    if (isCompleted && isStarted && startTime && !isNavigating) {
       setIsNavigating(true);
       // 카메라 정지는 컴포넌트 언마운트 시 useFaceDetection 훅의 cleanup에서 자동 처리됨
       // stopDetection을 여기서 호출하면 의존성 변경으로 인한 race condition 발생
       router.push('/assessment/result');
     }
-  }, [isCompleted, startTime, router, isNavigating]);
+  }, [isCompleted, isStarted, startTime, router, isNavigating]);
 
   // 세션 확인 및 생성
   useEffect(() => {
     initSession();
   }, [initSession]);
+
+  // 페이지 마운트 시 이전 완료된 평가 상태 확인 및 리셋
+  const hasCheckedInitialState = useRef(false);
+  useEffect(() => {
+    if (!hasCheckedInitialState.current) {
+      hasCheckedInitialState.current = true;
+      // 페이지 진입 시 이미 완료된 평가가 있으면 리셋
+      // (이전 세션의 잔여 상태)
+      if (isCompleted) {
+        resetAssessment();
+      }
+    }
+  }, [isCompleted, resetAssessment]);
 
   // 문항 변경 시 감정 기록에 문항 인덱스 전달
   useEffect(() => {
@@ -342,22 +398,37 @@ export default function AssessmentPage() {
                   </p>
 
                   <div className="space-y-3">
-                    <Button
-                      onClick={handleStartWithCamera}
-                      size="lg"
-                      fullWidth
-                      disabled={isCameraLoading}
-                    >
-                      {isCameraLoading ? '카메라 준비 중...' : '카메라 활성화하고 시작'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleStartWithoutCamera}
-                      size="lg"
-                      fullWidth
-                    >
-                      카메라 없이 시작
-                    </Button>
+                    {isCameraLoading ? (
+                      <div className="space-y-3">
+                        <div className="h-2 bg-[var(--neutral-200)] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-[var(--primary)] transition-all duration-300"
+                            style={{ width: `${loadingProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-sm text-[var(--neutral-600)]">
+                          {loadingMessage}
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <Button
+                          onClick={handleStartWithCamera}
+                          size="lg"
+                          fullWidth
+                        >
+                          카메라 활성화하고 시작
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={handleStartWithoutCamera}
+                          size="lg"
+                          fullWidth
+                        >
+                          카메라 없이 시작
+                        </Button>
+                      </>
+                    )}
                   </div>
 
                   <p className="text-xs text-[var(--neutral-400)] mt-4">
@@ -437,7 +508,7 @@ export default function AssessmentPage() {
             <Button
               variant="ghost"
               onClick={() => {
-                if (confirm('평가를 종료하시겠습니까? 진행 상황이 저장되지 않습니다.')) {
+                if (confirm('평가를 중단하시겠습니까?\n\n⚠️ 현재까지의 응답은 저장되지 않으며, 기록에 반영되지 않습니다.')) {
                   resetAssessment();
                   router.push('/');
                 }

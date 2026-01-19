@@ -2,17 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { initTensorFlow } from '@/lib/ai/tensorflow';
-import * as faceLandmarksDetection from '@tensorflow-models/face-landmarks-detection';
 
-// 감정 타입
-export type EmotionType =
-  | 'neutral'    // 중립/집중
-  | 'happy'      // 행복/만족
-  | 'confused'   // 혼란/당황
-  | 'anxious'    // 불안/긴장
-  | 'sad'        // 슬픔
-  | 'surprised'  // 놀람
-  | 'angry';     // 화남
+// 타입만 import (런타임 번들에 포함되지 않음)
+import type * as faceLandmarksDetectionTypes from '@tensorflow-models/face-landmarks-detection';
+
+// 감정 타입 및 상수 (constants 파일에서 re-export)
+export type { EmotionType } from '@/lib/constants/emotionConstants';
+export { emotionLabels, emotionIcons, emotionColors } from '@/lib/constants/emotionConstants';
+import type { EmotionType } from '@/lib/constants/emotionConstants';
 
 // 감정 기록
 export interface EmotionRecord {
@@ -86,7 +83,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
   const streamRef = useRef<MediaStream | null>(null);
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const currentQuestionIndexRef = useRef<number>(0);
-  const detectorRef = useRef<faceLandmarksDetection.FaceLandmarksDetector | null>(null);
+  const detectorRef = useRef<faceLandmarksDetectionTypes.FaceLandmarksDetector | null>(null);
 
   // 감정 분포 계산
   const emotionDistribution = calculateEmotionDistribution(emotionTimeline);
@@ -108,12 +105,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
         audio: false,
       });
 
-      // 비디오 트랙 설정 로그
-      const videoTrack = mediaStream.getVideoTracks()[0];
-      if (videoTrack) {
-        const settings = videoTrack.getSettings();
-        console.log('[FaceDetection] Video track settings:', settings);
-      }
+      // Video track is ready
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -129,8 +121,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
       setStream(mediaStream); // 반응형 상태 업데이트
       setIsPermissionGranted(true);
       return true;
-    } catch (err) {
-      console.error('[FaceDetection] Webcam access denied:', err);
+    } catch {
       setError('카메라에 접근할 수 없습니다. 권한을 확인해주세요.');
       setIsPermissionGranted(false);
       return false;
@@ -150,7 +141,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
   }, []);
 
   // 얼굴 랜드마크 기반 실제 표정 분석
-  const analyzeEmotionFromLandmarks = useCallback((keypoints: faceLandmarksDetection.Keypoint[]): EmotionType => {
+  const analyzeEmotionFromLandmarks = useCallback((keypoints: faceLandmarksDetectionTypes.Keypoint[]): EmotionType => {
     if (keypoints.length < 468) {
       return 'neutral';
     }
@@ -179,7 +170,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
     const noseTip = keypoints[4];
 
     // 거리 계산 유틸리티
-    const distance = (p1: faceLandmarksDetection.Keypoint, p2: faceLandmarksDetection.Keypoint) => {
+    const distance = (p1: faceLandmarksDetectionTypes.Keypoint, p2: faceLandmarksDetectionTypes.Keypoint) => {
       return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
     };
 
@@ -268,7 +259,6 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
 
         const isReady = await waitForVideo();
         if (!isReady) {
-          console.log('[FaceDetection] Video not ready, skipping');
           return;
         }
       }
@@ -280,7 +270,6 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
 
       if (faces.length === 0) {
         // 얼굴이 감지되지 않음
-        console.log('[FaceDetection] No face detected');
         return;
       }
 
@@ -307,12 +296,12 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
       if (onEmotionChange) {
         onEmotionChange(emotion, confidence);
       }
-    } catch (err) {
-      console.warn('[FaceDetection] Detection error:', err);
+    } catch {
+      // Detection error - continue
     }
   }, [isActive, analyzeEmotionFromLandmarks, onEmotionChange]);
 
-  // 감지 시작
+  // 감지 시작 (지연 로딩)
   const startDetection = useCallback(async (): Promise<boolean> => {
     setError(null); // 이전 에러 초기화
     setIsLoading(true);
@@ -321,17 +310,16 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
       // TensorFlow.js 초기화
       await initTensorFlow();
 
-      // Face Landmarks Detection 모델 로드 (TensorFlow.js 백엔드)
+      // Face Landmarks Detection 모델 로드 (동적 import로 번들 크기 최적화)
       if (!detectorRef.current) {
-        console.log('[FaceDetection] Loading face landmarks model...');
+        const faceLandmarksDetection = await import('@tensorflow-models/face-landmarks-detection');
         const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-        const detectorConfig: faceLandmarksDetection.MediaPipeFaceMeshTfjsModelConfig = {
+        const detectorConfig: faceLandmarksDetectionTypes.MediaPipeFaceMeshTfjsModelConfig = {
           runtime: 'tfjs',
           refineLandmarks: true,
           maxFaces: 1,
         };
         detectorRef.current = await faceLandmarksDetection.createDetector(model, detectorConfig);
-        console.log('[FaceDetection] Face landmarks model loaded');
       }
 
       // 웹캠 시작
@@ -345,8 +333,7 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
       setIsLoading(false);
 
       return true;
-    } catch (error) {
-      console.error('[FaceDetection] Failed to start:', error);
+    } catch {
       setError('얼굴 인식 모델을 로드하는데 실패했습니다.');
       setIsLoading(false);
       return false;
@@ -400,8 +387,8 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
       isDetecting = true;
       try {
         await detectEmotion();
-      } catch (err) {
-        console.warn('[FaceDetection] Detection loop error:', err);
+      } catch {
+        // Detection loop error - continue
       } finally {
         isDetecting = false;
       }
@@ -429,11 +416,10 @@ export function useFaceDetection(options: UseFaceDetectionOptions = {}): UseFace
       if (streamRef.current && videoRef.current) {
         // 현재 비디오 요소에 스트림이 없거나 다른 스트림이면 재할당
         if (videoRef.current.srcObject !== streamRef.current) {
-          console.log('[FaceDetection] Re-assigning stream to new video element');
           videoRef.current.srcObject = streamRef.current;
           videoRef.current.style.filter = 'none';
-          videoRef.current.play().catch(err => {
-            console.warn('[FaceDetection] Video play failed:', err);
+          videoRef.current.play().catch(() => {
+            // Video play failed - stream may have been stopped
           });
         }
       }
@@ -497,37 +483,6 @@ function calculateEmotionDistribution(timeline: EmotionRecord[]): EmotionDistrib
     .sort((a, b) => b.count - a.count);
 }
 
-// 감정 이름 한글화
-export const emotionLabels: Record<EmotionType, string> = {
-  neutral: '집중',
-  happy: '만족',
-  confused: '혼란',
-  anxious: '불안',
-  sad: '슬픔',
-  surprised: '놀람',
-  angry: '화남',
-};
-
-// 감정 아이콘
-export const emotionIcons: Record<EmotionType, string> = {
-  neutral: '😐',
-  happy: '😊',
-  confused: '😕',
-  anxious: '😰',
-  sad: '😢',
-  surprised: '😮',
-  angry: '😠',
-};
-
-// 감정 색상
-export const emotionColors: Record<EmotionType, string> = {
-  neutral: '#6B7280',
-  happy: '#10B981',
-  confused: '#F59E0B',
-  anxious: '#EF4444',
-  sad: '#3B82F6',
-  surprised: '#8B5CF6',
-  angry: '#DC2626',
-};
+// 감정 상수는 '@/lib/constants/emotionConstants'에서 re-export됨
 
 export default useFaceDetection;

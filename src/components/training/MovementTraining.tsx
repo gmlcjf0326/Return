@@ -5,18 +5,16 @@ import { usePoseDetection, type Keypoint, type HandKeypoint } from '@/hooks/useP
 import { poseGuides, type MovementType, type PoseGuide } from '@/data/pose-guides';
 import Button from '@/components/ui/Button';
 
-// 훈련용 동작 목록 (쉬운 것부터)
+// 훈련용 동작 목록 (고정 자세만 - 동적 동작 제거)
 const trainingMovements: MovementType[] = [
-  'smile',
-  'thumbs_up',
-  'wave_hand',
-  'hand_raise_right',
-  'hand_raise_left',
-  'hand_raise_both',
-  'arms_spread',
-  'close_eyes',
-  'open_mouth',
-  'clap_hands',
+  'smile',           // 미소 짓기
+  'thumbs_up',       // 엄지 척
+  'hand_raise_right', // 오른손 들기
+  'hand_raise_left',  // 왼손 들기
+  'hand_raise_both',  // 양손 들기
+  'arms_spread',      // 팔 벌리기
+  'close_eyes',       // 눈 감기
+  'open_mouth',       // 입 벌리기
 ];
 
 // MoveNet 키포인트 인덱스 상수
@@ -44,7 +42,7 @@ const KEYPOINT_IDX = {
 export interface PoseFeedback {
   message: string;
   type: 'success' | 'warning' | 'info';
-  score: number;
+  isPassed: boolean;  // 통과 여부 (점수 제거)
 }
 
 // 두 키포인트 간 거리 계산
@@ -53,7 +51,7 @@ function getDistance(kp1: Keypoint, kp2: Keypoint): number {
 }
 
 // 키포인트 유효성 확인
-function isValidKeypoint(kp: Keypoint | undefined, minScore = 0.3): kp is Keypoint {
+function isValidKeypoint(kp: Keypoint | undefined, minScore = 0.4): kp is Keypoint {
   return !!kp && (kp.score || 0) >= minScore;
 }
 
@@ -65,120 +63,67 @@ function getAverageConfidence(keypoints: Keypoint[]): number {
 
 // ===== 동작별 평가 함수들 =====
 
-// 왼손 들기 평가
-function evaluateHandRaiseLeft(keypoints: Keypoint[]): { score: number; feedback: PoseFeedback } {
+// 왼손 들기 평가 (Pass/Fail: 손목이 어깨보다 위에 있으면 통과)
+function evaluateHandRaiseLeft(keypoints: Keypoint[]): { isPassed: boolean; feedback: PoseFeedback } {
   const leftShoulder = keypoints[KEYPOINT_IDX.left_shoulder];
   const leftWrist = keypoints[KEYPOINT_IDX.left_wrist];
-  const leftElbow = keypoints[KEYPOINT_IDX.left_elbow];
-  const nose = keypoints[KEYPOINT_IDX.nose];
 
   if (!isValidKeypoint(leftShoulder) || !isValidKeypoint(leftWrist)) {
-    return { score: 0, feedback: { message: '왼팔이 보이지 않습니다', type: 'warning', score: 0 } };
+    return { isPassed: false, feedback: { message: '왼팔이 보이지 않습니다', type: 'warning', isPassed: false } };
   }
 
-  // 손목이 어깨보다 위에 있는지 확인
+  // 통과 조건: 손목이 어깨보다 위에 있음
   const isAboveShoulder = leftWrist.y < leftShoulder.y;
 
-  if (!isAboveShoulder) {
-    return { score: 25, feedback: { message: '왼손을 더 높이 들어주세요', type: 'warning', score: 25 } };
+  if (isAboveShoulder) {
+    return { isPassed: true, feedback: { message: '잘하고 있어요!', type: 'success', isPassed: true } };
   }
 
-  // 손목이 머리(코) 위에 있는지 확인
-  const isAboveHead = isValidKeypoint(nose) && leftWrist.y < nose.y;
-
-  // 팔 펴짐 정도 확인 (어깨-팔꿈치-손목이 일직선에 가까운지)
-  let armExtension = 0.8;
-  if (isValidKeypoint(leftElbow)) {
-    const shoulderToElbow = getDistance(leftShoulder, leftElbow);
-    const elbowToWrist = getDistance(leftElbow, leftWrist);
-    const shoulderToWrist = getDistance(leftShoulder, leftWrist);
-    // 삼각형 부등식을 이용한 직선 정도 계산
-    armExtension = shoulderToWrist / (shoulderToElbow + elbowToWrist + 0.01);
-  }
-
-  // 높이에 따른 점수 계산
-  const heightDiff = leftShoulder.y - leftWrist.y;
-  const heightScore = Math.min(heightDiff / 150, 1) * 40; // 최대 40점
-
-  let score = 40 + heightScore + armExtension * 20; // 기본 40 + 높이 40 + 팔펴짐 20
-
-  if (isAboveHead) {
-    score = Math.min(score + 10, 100);
-    return { score: Math.round(score), feedback: { message: '아주 잘하고 있어요!', type: 'success', score: Math.round(score) } };
-  }
-
-  return { score: Math.round(score), feedback: { message: '좋아요! 조금 더 높이 들어보세요', type: 'info', score: Math.round(score) } };
+  return { isPassed: false, feedback: { message: '왼손을 더 높이 들어주세요', type: 'warning', isPassed: false } };
 }
 
-// 오른손 들기 평가
-function evaluateHandRaiseRight(keypoints: Keypoint[]): { score: number; feedback: PoseFeedback } {
+// 오른손 들기 평가 (Pass/Fail: 손목이 어깨보다 위에 있으면 통과)
+function evaluateHandRaiseRight(keypoints: Keypoint[]): { isPassed: boolean; feedback: PoseFeedback } {
   const rightShoulder = keypoints[KEYPOINT_IDX.right_shoulder];
   const rightWrist = keypoints[KEYPOINT_IDX.right_wrist];
-  const rightElbow = keypoints[KEYPOINT_IDX.right_elbow];
-  const nose = keypoints[KEYPOINT_IDX.nose];
 
   if (!isValidKeypoint(rightShoulder) || !isValidKeypoint(rightWrist)) {
-    return { score: 0, feedback: { message: '오른팔이 보이지 않습니다', type: 'warning', score: 0 } };
+    return { isPassed: false, feedback: { message: '오른팔이 보이지 않습니다', type: 'warning', isPassed: false } };
   }
 
+  // 통과 조건: 손목이 어깨보다 위에 있음
   const isAboveShoulder = rightWrist.y < rightShoulder.y;
 
-  if (!isAboveShoulder) {
-    return { score: 25, feedback: { message: '오른손을 더 높이 들어주세요', type: 'warning', score: 25 } };
+  if (isAboveShoulder) {
+    return { isPassed: true, feedback: { message: '잘하고 있어요!', type: 'success', isPassed: true } };
   }
 
-  const isAboveHead = isValidKeypoint(nose) && rightWrist.y < nose.y;
-
-  let armExtension = 0.8;
-  if (isValidKeypoint(rightElbow)) {
-    const shoulderToElbow = getDistance(rightShoulder, rightElbow);
-    const elbowToWrist = getDistance(rightElbow, rightWrist);
-    const shoulderToWrist = getDistance(rightShoulder, rightWrist);
-    armExtension = shoulderToWrist / (shoulderToElbow + elbowToWrist + 0.01);
-  }
-
-  const heightDiff = rightShoulder.y - rightWrist.y;
-  const heightScore = Math.min(heightDiff / 150, 1) * 40;
-
-  let score = 40 + heightScore + armExtension * 20;
-
-  if (isAboveHead) {
-    score = Math.min(score + 10, 100);
-    return { score: Math.round(score), feedback: { message: '아주 잘하고 있어요!', type: 'success', score: Math.round(score) } };
-  }
-
-  return { score: Math.round(score), feedback: { message: '좋아요! 조금 더 높이 들어보세요', type: 'info', score: Math.round(score) } };
+  return { isPassed: false, feedback: { message: '오른손을 더 높이 들어주세요', type: 'warning', isPassed: false } };
 }
 
-// 양손 들기 평가
-function evaluateHandRaiseBoth(keypoints: Keypoint[]): { score: number; feedback: PoseFeedback } {
+// 양손 들기 평가 (Pass/Fail: 양손 모두 어깨보다 위에 있으면 통과)
+function evaluateHandRaiseBoth(keypoints: Keypoint[]): { isPassed: boolean; feedback: PoseFeedback } {
   const leftResult = evaluateHandRaiseLeft(keypoints);
   const rightResult = evaluateHandRaiseRight(keypoints);
 
-  // 양손 모두 제대로 들어야 함
-  const avgScore = (leftResult.score + rightResult.score) / 2;
-
-  if (leftResult.score < 40 && rightResult.score < 40) {
-    return { score: Math.round(avgScore), feedback: { message: '양손을 머리 위로 들어주세요', type: 'warning', score: Math.round(avgScore) } };
+  // 통과 조건: 양손 모두 통과
+  if (leftResult.isPassed && rightResult.isPassed) {
+    return { isPassed: true, feedback: { message: '완벽해요!', type: 'success', isPassed: true } };
   }
 
-  if (leftResult.score < 40) {
-    return { score: Math.round(avgScore), feedback: { message: '왼손을 더 높이 들어주세요', type: 'info', score: Math.round(avgScore) } };
+  if (!leftResult.isPassed && !rightResult.isPassed) {
+    return { isPassed: false, feedback: { message: '양손을 머리 위로 들어주세요', type: 'warning', isPassed: false } };
   }
 
-  if (rightResult.score < 40) {
-    return { score: Math.round(avgScore), feedback: { message: '오른손을 더 높이 들어주세요', type: 'info', score: Math.round(avgScore) } };
+  if (!leftResult.isPassed) {
+    return { isPassed: false, feedback: { message: '왼손을 더 높이 들어주세요', type: 'info', isPassed: false } };
   }
 
-  if (avgScore >= 80) {
-    return { score: Math.round(avgScore), feedback: { message: '완벽해요!', type: 'success', score: Math.round(avgScore) } };
-  }
-
-  return { score: Math.round(avgScore), feedback: { message: '좋아요! 팔을 더 쭉 펴보세요', type: 'info', score: Math.round(avgScore) } };
+  return { isPassed: false, feedback: { message: '오른손을 더 높이 들어주세요', type: 'info', isPassed: false } };
 }
 
-// 팔 벌리기 평가 (T자 포즈)
-function evaluateArmsSpread(keypoints: Keypoint[]): { score: number; feedback: PoseFeedback } {
+// 팔 벌리기 평가 (Pass/Fail: 양팔이 옆으로 벌어지고 어깨 높이면 통과)
+function evaluateArmsSpread(keypoints: Keypoint[]): { isPassed: boolean; feedback: PoseFeedback } {
   const leftShoulder = keypoints[KEYPOINT_IDX.left_shoulder];
   const rightShoulder = keypoints[KEYPOINT_IDX.right_shoulder];
   const leftWrist = keypoints[KEYPOINT_IDX.left_wrist];
@@ -186,79 +131,60 @@ function evaluateArmsSpread(keypoints: Keypoint[]): { score: number; feedback: P
 
   if (!isValidKeypoint(leftShoulder) || !isValidKeypoint(rightShoulder) ||
       !isValidKeypoint(leftWrist) || !isValidKeypoint(rightWrist)) {
-    return { score: 0, feedback: { message: '양팔이 보이지 않습니다', type: 'warning', score: 0 } };
+    return { isPassed: false, feedback: { message: '양팔이 보이지 않습니다', type: 'warning', isPassed: false } };
   }
-
-  // 손목이 어깨와 비슷한 높이에 있는지 확인 (T자 포즈)
-  const leftHeightDiff = Math.abs(leftWrist.y - leftShoulder.y);
-  const rightHeightDiff = Math.abs(rightWrist.y - rightShoulder.y);
-  const avgHeightDiff = (leftHeightDiff + rightHeightDiff) / 2;
 
   // 손목이 어깨 바깥쪽에 있는지 확인
   const leftSpread = leftWrist.x < leftShoulder.x; // 카메라 기준 왼손은 왼쪽에
   const rightSpread = rightWrist.x > rightShoulder.x; // 오른손은 오른쪽에
 
   if (!leftSpread || !rightSpread) {
-    return { score: 30, feedback: { message: '팔을 옆으로 더 벌려주세요', type: 'warning', score: 30 } };
+    return { isPassed: false, feedback: { message: '팔을 옆으로 더 벌려주세요', type: 'warning', isPassed: false } };
   }
 
-  // 어깨와 손목 사이 거리 (넓게 벌릴수록 높은 점수)
-  const leftSpreadDistance = Math.abs(leftWrist.x - leftShoulder.x);
-  const rightSpreadDistance = Math.abs(rightWrist.x - rightShoulder.x);
-  const avgSpreadDistance = (leftSpreadDistance + rightSpreadDistance) / 2;
+  // 손목이 어깨와 비슷한 높이에 있는지 확인 (T자 포즈) - 여유 있게 80px
+  const leftHeightDiff = Math.abs(leftWrist.y - leftShoulder.y);
+  const rightHeightDiff = Math.abs(rightWrist.y - rightShoulder.y);
+  const avgHeightDiff = (leftHeightDiff + rightHeightDiff) / 2;
 
-  // 수평 정도 점수 (높이 차이가 작을수록 좋음)
-  const horizontalScore = Math.max(0, 1 - avgHeightDiff / 100) * 30;
-
-  // 벌림 정도 점수
-  const spreadScore = Math.min(avgSpreadDistance / 150, 1) * 40;
-
-  const score = 30 + horizontalScore + spreadScore;
-
-  if (avgHeightDiff > 50) {
-    return { score: Math.round(score), feedback: { message: '팔을 어깨 높이로 맞춰주세요', type: 'info', score: Math.round(score) } };
+  if (avgHeightDiff > 80) {
+    return { isPassed: false, feedback: { message: '팔을 어깨 높이로 맞춰주세요', type: 'info', isPassed: false } };
   }
 
-  if (score >= 80) {
-    return { score: Math.round(score), feedback: { message: 'T자 포즈 완벽해요!', type: 'success', score: Math.round(score) } };
-  }
-
-  return { score: Math.round(score), feedback: { message: '좋아요! 팔을 더 넓게 벌려보세요', type: 'info', score: Math.round(score) } };
+  // 통과 조건: 양팔 벌어지고 어깨 높이 유지
+  return { isPassed: true, feedback: { message: 'T자 포즈 완벽해요!', type: 'success', isPassed: true } };
 }
 
-// 손 흔들기 평가 (손목의 움직임 감지)
+// 손 흔들기 평가 (Pass/Fail: 손목 방향 전환 2회 이상이면 통과)
 function evaluateWaveHand(
   keypoints: Keypoint[],
   waveHistory: { x: number; timestamp: number }[]
-): { score: number; feedback: PoseFeedback } {
+): { isPassed: boolean; feedback: PoseFeedback } {
   const rightWrist = keypoints[KEYPOINT_IDX.right_wrist];
   const rightShoulder = keypoints[KEYPOINT_IDX.right_shoulder];
 
   if (!isValidKeypoint(rightWrist) || !isValidKeypoint(rightShoulder)) {
-    return { score: 0, feedback: { message: '오른손이 보이지 않습니다', type: 'warning', score: 0 } };
+    return { isPassed: false, feedback: { message: '오른손이 보이지 않습니다', type: 'warning', isPassed: false } };
   }
 
   // 손목이 어깨 높이 이상에 있는지
   const isRaised = rightWrist.y < rightShoulder.y + 50;
 
   if (!isRaised) {
-    return { score: 20, feedback: { message: '손을 어깨 높이로 들어주세요', type: 'warning', score: 20 } };
+    return { isPassed: false, feedback: { message: '손을 어깨 높이로 들어주세요', type: 'warning', isPassed: false } };
   }
 
   // 흔들기 동작 분석 (x 좌표 변화)
   if (waveHistory.length < 3) {
-    return { score: 40, feedback: { message: '손을 좌우로 흔들어주세요', type: 'info', score: 40 } };
+    return { isPassed: false, feedback: { message: '손을 좌우로 흔들어주세요', type: 'info', isPassed: false } };
   }
 
-  // x 좌표 변화량 계산
-  let totalMovement = 0;
+  // x 좌표 방향 전환 횟수 계산
   let directionChanges = 0;
   let prevDirection = 0;
 
   for (let i = 1; i < waveHistory.length; i++) {
     const diff = waveHistory[i].x - waveHistory[i - 1].x;
-    totalMovement += Math.abs(diff);
-
     const currentDirection = Math.sign(diff);
     if (currentDirection !== 0 && currentDirection !== prevDirection && prevDirection !== 0) {
       directionChanges++;
@@ -266,33 +192,28 @@ function evaluateWaveHand(
     if (currentDirection !== 0) prevDirection = currentDirection;
   }
 
-  // 방향 전환이 많을수록, 움직임이 클수록 높은 점수
-  const movementScore = Math.min(totalMovement / 200, 1) * 30;
-  const waveScore = Math.min(directionChanges / 4, 1) * 30;
-
-  const score = 40 + movementScore + waveScore;
-
-  if (directionChanges >= 3) {
-    return { score: Math.round(score), feedback: { message: '손 흔들기 잘하고 있어요!', type: 'success', score: Math.round(score) } };
+  // 통과 조건: 방향 전환 2회 이상
+  if (directionChanges >= 2) {
+    return { isPassed: true, feedback: { message: '손 흔들기 잘하고 있어요!', type: 'success', isPassed: true } };
   }
 
-  return { score: Math.round(score), feedback: { message: '손을 더 크게 흔들어주세요', type: 'info', score: Math.round(score) } };
+  return { isPassed: false, feedback: { message: '손을 더 크게 흔들어주세요', type: 'info', isPassed: false } };
 }
 
-// 박수 평가 (양손 거리 변화)
+// 박수 평가 (Pass/Fail: 양손 가까워졌다 멀어지기 1회 이상이면 통과)
 function evaluateClapHands(
   keypoints: Keypoint[],
   clapHistory: { distance: number; timestamp: number }[]
-): { score: number; feedback: PoseFeedback } {
+): { isPassed: boolean; feedback: PoseFeedback } {
   const leftWrist = keypoints[KEYPOINT_IDX.left_wrist];
   const rightWrist = keypoints[KEYPOINT_IDX.right_wrist];
 
   if (!isValidKeypoint(leftWrist) || !isValidKeypoint(rightWrist)) {
-    return { score: 0, feedback: { message: '양손이 보이지 않습니다', type: 'warning', score: 0 } };
+    return { isPassed: false, feedback: { message: '양손이 보이지 않습니다', type: 'warning', isPassed: false } };
   }
 
   if (clapHistory.length < 5) {
-    return { score: 30, feedback: { message: '박수를 쳐주세요', type: 'info', score: 30 } };
+    return { isPassed: false, feedback: { message: '박수를 쳐주세요', type: 'info', isPassed: false } };
   }
 
   // 가까워졌다 멀어지는 패턴 감지 (박수)
@@ -310,34 +231,29 @@ function evaluateClapHands(
     }
   }
 
-  const score = 30 + Math.min(clapCount / 3, 1) * 70;
-
-  if (clapCount >= 3) {
-    return { score: Math.round(score), feedback: { message: '박수 잘 쳤어요!', type: 'success', score: Math.round(score) } };
-  }
-
+  // 통과 조건: 박수 1회 이상
   if (clapCount >= 1) {
-    return { score: Math.round(score), feedback: { message: '좋아요! 박수를 더 쳐주세요', type: 'info', score: Math.round(score) } };
+    return { isPassed: true, feedback: { message: '박수 잘 쳤어요!', type: 'success', isPassed: true } };
   }
 
-  return { score: Math.round(score), feedback: { message: '양손을 모았다 벌렸다 해주세요', type: 'info', score: Math.round(score) } };
+  return { isPassed: false, feedback: { message: '양손을 모았다 벌렸다 해주세요', type: 'info', isPassed: false } };
 }
 
-// 엄지 척 평가 (손목 위치와 자세)
-function evaluateThumbsUp(keypoints: Keypoint[]): { score: number; feedback: PoseFeedback } {
+// 엄지 척 평가 (Pass/Fail: 손목이 어깨 앞쪽에 있고 팔꿈치가 구부러지면 통과)
+function evaluateThumbsUp(keypoints: Keypoint[]): { isPassed: boolean; feedback: PoseFeedback } {
   const rightWrist = keypoints[KEYPOINT_IDX.right_wrist];
   const rightElbow = keypoints[KEYPOINT_IDX.right_elbow];
   const rightShoulder = keypoints[KEYPOINT_IDX.right_shoulder];
 
   if (!isValidKeypoint(rightWrist) || !isValidKeypoint(rightShoulder)) {
-    return { score: 0, feedback: { message: '오른손이 보이지 않습니다', type: 'warning', score: 0 } };
+    return { isPassed: false, feedback: { message: '오른손이 보이지 않습니다', type: 'warning', isPassed: false } };
   }
 
   // 팔꿈치가 구부러지고 손목이 어깨 앞쪽에 있는지 확인
   const isInFront = rightWrist.y < rightShoulder.y + 100;
 
   if (!isInFront) {
-    return { score: 30, feedback: { message: '주먹을 앞으로 내밀어주세요', type: 'warning', score: 30 } };
+    return { isPassed: false, feedback: { message: '주먹을 앞으로 내밀어주세요', type: 'warning', isPassed: false } };
   }
 
   // 팔꿈치 구부림 각도 확인
@@ -352,102 +268,76 @@ function evaluateThumbsUp(keypoints: Keypoint[]): { score: number; feedback: Pos
     elbowBend = 1 - straightness; // 구부러짐 정도
   }
 
-  // 엄지 척 자세는 팔이 약간 구부러진 상태가 자연스러움
-  const bendScore = elbowBend > 0.2 ? 40 : 20;
-  const positionScore = 30;
-
-  const score = 30 + bendScore + positionScore;
-
-  if (score >= 80) {
-    return { score: Math.round(score), feedback: { message: '엄지 척!', type: 'success', score: Math.round(score) } };
+  // 통과 조건: 팔이 약간 구부러진 상태
+  if (elbowBend > 0.15) {
+    return { isPassed: true, feedback: { message: '엄지 척!', type: 'success', isPassed: true } };
   }
 
-  return { score: Math.round(score), feedback: { message: '좋아요! 엄지를 위로 올려주세요', type: 'info', score: Math.round(score) } };
+  return { isPassed: false, feedback: { message: '좋아요! 엄지를 위로 올려주세요', type: 'info', isPassed: false } };
 }
 
-// 일반 자세 평가 (포즈 감지만 확인)
-function evaluateGeneralPose(keypoints: Keypoint[]): { score: number; feedback: PoseFeedback } {
+// 일반 자세 평가 (Pass/Fail: 키포인트 감지 신뢰도 0.5 이상이면 통과)
+function evaluateGeneralPose(keypoints: Keypoint[]): { isPassed: boolean; feedback: PoseFeedback } {
   const avgConfidence = getAverageConfidence(keypoints);
   const validKeypointCount = keypoints.filter(kp => isValidKeypoint(kp)).length;
 
   if (validKeypointCount < 5) {
-    return { score: 20, feedback: { message: '카메라에 더 가까이 와주세요', type: 'warning', score: 20 } };
+    return { isPassed: false, feedback: { message: '카메라에 더 가까이 와주세요', type: 'warning', isPassed: false } };
   }
 
-  const score = 50 + avgConfidence * 50;
-
-  if (avgConfidence > 0.7) {
-    return { score: Math.round(score), feedback: { message: '자세가 잘 인식되고 있어요', type: 'success', score: Math.round(score) } };
+  // 통과 조건: 평균 신뢰도 0.5 이상
+  if (avgConfidence > 0.5) {
+    return { isPassed: true, feedback: { message: '자세가 잘 인식되고 있어요', type: 'success', isPassed: true } };
   }
 
-  return { score: Math.round(score), feedback: { message: '자세를 유지해주세요', type: 'info', score: Math.round(score) } };
+  return { isPassed: false, feedback: { message: '자세를 유지해주세요', type: 'info', isPassed: false } };
 }
 
-// 실제 동작 점수 계산 함수
-function calculatePoseMatchScore(
+// 실제 동작 평가 함수 (Pass/Fail)
+function calculatePoseMatch(
   guide: PoseGuide,
-  duration: number,
   keypoints: Keypoint[],
   waveHistory: { x: number; timestamp: number }[],
   clapHistory: { distance: number; timestamp: number }[]
-): { score: number; feedback: PoseFeedback } {
-  // 키포인트가 없거나 불충분하면 낮은 점수
+): { isPassed: boolean; feedback: PoseFeedback } {
+  // 키포인트가 없거나 불충분하면 미통과
   if (!keypoints || keypoints.length === 0) {
-    return { score: 0, feedback: { message: '카메라에서 사람이 감지되지 않습니다', type: 'warning', score: 0 } };
+    return { isPassed: false, feedback: { message: '카메라에서 사람이 감지되지 않습니다', type: 'warning', isPassed: false } };
   }
 
   const avgConfidence = getAverageConfidence(keypoints);
   if (avgConfidence < 0.2) {
-    return { score: 0, feedback: { message: '자세 인식이 불확실합니다. 조명을 확인해주세요', type: 'warning', score: 0 } };
+    return { isPassed: false, feedback: { message: '자세 인식이 불확실합니다. 조명을 확인해주세요', type: 'warning', isPassed: false } };
   }
 
   // 동작별 평가
-  let result: { score: number; feedback: PoseFeedback };
-
   switch (guide.id) {
     case 'hand_raise_left':
-      result = evaluateHandRaiseLeft(keypoints);
-      break;
+      return evaluateHandRaiseLeft(keypoints);
     case 'hand_raise_right':
-      result = evaluateHandRaiseRight(keypoints);
-      break;
+      return evaluateHandRaiseRight(keypoints);
     case 'hand_raise_both':
-      result = evaluateHandRaiseBoth(keypoints);
-      break;
+      return evaluateHandRaiseBoth(keypoints);
     case 'arms_spread':
-      result = evaluateArmsSpread(keypoints);
-      break;
+      return evaluateArmsSpread(keypoints);
     case 'wave_hand':
-      result = evaluateWaveHand(keypoints, waveHistory);
-      break;
+      return evaluateWaveHand(keypoints, waveHistory);
     case 'clap_hands':
-      result = evaluateClapHands(keypoints, clapHistory);
-      break;
+      return evaluateClapHands(keypoints, clapHistory);
     case 'thumbs_up':
-      result = evaluateThumbsUp(keypoints);
-      break;
+      return evaluateThumbsUp(keypoints);
     // 얼굴 표정 동작은 포즈 감지로 평가하기 어려우므로 일반 평가
     case 'smile':
     case 'close_eyes':
     case 'open_mouth':
-      result = evaluateGeneralPose(keypoints);
-      break;
+      return evaluateGeneralPose(keypoints);
     default:
-      result = evaluateGeneralPose(keypoints);
+      return evaluateGeneralPose(keypoints);
   }
-
-  // 지속 시간 보너스 (최대 10점)
-  const durationBonus = Math.min(duration / guide.targetDuration, 1) * 10;
-  const finalScore = Math.min(Math.round(result.score + durationBonus), 100);
-
-  return {
-    score: finalScore,
-    feedback: { ...result.feedback, score: finalScore }
-  };
 }
 
 interface MovementTrainingProps {
-  onComplete?: (avgScore: number, completedCount: number) => void;
+  onComplete?: (passedCount: number, totalCount: number) => void;
   exerciseCount?: number;
 }
 
@@ -459,12 +349,12 @@ export default function MovementTraining({
   const [phase, setPhase] = useState<'ready' | 'countdown' | 'active' | 'result'>('ready');
   const [countdown, setCountdown] = useState(3);
   const [matchProgress, setMatchProgress] = useState(0);
-  const [scores, setScores] = useState<number[]>([]);
+  const [results, setResults] = useState<boolean[]>([]);  // 통과 여부 배열 (점수 제거)
   const [showFinalResult, setShowFinalResult] = useState(false);
-  const [currentScore, setCurrentScore] = useState<number | null>(null);
+  const [currentPassed, setCurrentPassed] = useState<boolean | null>(null);  // 현재 동작 통과 여부
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [currentFeedback, setCurrentFeedback] = useState<PoseFeedback | null>(null);
-  const [realtimeScore, setRealtimeScore] = useState<number>(0);
+  const [isCurrentlyPassing, setIsCurrentlyPassing] = useState<boolean>(false);  // 실시간 통과 상태
 
   // 훈련할 동작들 선택 (랜덤하게 섞어서 지정된 개수만큼)
   const [selectedMovements] = useState<MovementType[]>(() => {
@@ -495,12 +385,12 @@ export default function MovementTraining({
   } = usePoseDetection({
     enabled: true,
     detectionInterval: 100, // 더 빠른 감지를 위해 100ms
-    enableHandDetection: true,
-    enableFaceDetection: true,
+    enableHandDetection: true, // 손 감지 활성화 (엄지 척, 손 흔들기 등 동작 인식 향상)
+    enableFaceDetection: true, // 얼굴 인식 활성화 (초록색 박스로 표시)
   });
 
   // 인식된 키포인트 수 계산
-  const detectedKeypointsCount = keypoints.filter(kp => (kp.score || 0) > 0.3).length;
+  const detectedKeypointsCount = keypoints.filter(kp => (kp.score || 0) > 0.4).length;
   const detectedHandKeypointsCount = leftHandKeypoints.length + rightHandKeypoints.length;
   const detectedFaceKeypointsCount = faceKeypoints.length;
 
@@ -543,7 +433,7 @@ export default function MovementTraining({
         const leftWrist = keypoints[KEYPOINT_IDX.left_wrist];
 
         // 손 흔들기 히스토리 (오른손 x좌표)
-        if (rightWrist && (rightWrist.score || 0) > 0.3) {
+        if (rightWrist && (rightWrist.score || 0) > 0.4) {
           waveHistoryRef.current.push({ x: rightWrist.x, timestamp: Date.now() });
           // 최근 30개만 유지
           if (waveHistoryRef.current.length > 30) {
@@ -553,7 +443,7 @@ export default function MovementTraining({
 
         // 박수 히스토리 (양손 거리)
         if (leftWrist && rightWrist &&
-            (leftWrist.score || 0) > 0.3 && (rightWrist.score || 0) > 0.3) {
+            (leftWrist.score || 0) > 0.4 && (rightWrist.score || 0) > 0.4) {
           const distance = getDistance(leftWrist, rightWrist);
           clapHistoryRef.current.push({ distance, timestamp: Date.now() });
           // 최근 30개만 유지
@@ -563,22 +453,21 @@ export default function MovementTraining({
         }
       }
 
-      // 실시간 점수 및 피드백 계산
-      const { score, feedback } = calculatePoseMatchScore(
+      // 실시간 통과 여부 및 피드백 계산
+      const { isPassed, feedback } = calculatePoseMatch(
         guide,
-        elapsed,
         keypoints,
         waveHistoryRef.current,
         clapHistoryRef.current
       );
-      setRealtimeScore(score);
+      setIsCurrentlyPassing(isPassed);
       setCurrentFeedback(feedback);
 
       // 목표 시간 달성
       if (elapsed >= guide.targetDuration) {
-        // 최종 점수는 실시간으로 계산된 점수 사용
-        setCurrentScore(score);
-        setScores(prev => [...prev, score]);
+        // 최종 통과 여부는 실시간으로 계산된 결과 사용
+        setCurrentPassed(isPassed);
+        setResults(prev => [...prev, isPassed]);
         setPhase('result');
         stopDetection();
       }
@@ -606,14 +495,14 @@ export default function MovementTraining({
     waveHistoryRef.current = [];
     clapHistoryRef.current = [];
     setCurrentFeedback(null);
-    setRealtimeScore(0);
+    setIsCurrentlyPassing(false);
 
     const success = await startDetection();
     if (success) {
       setCountdown(3);
       setPhase('countdown');
       setMatchProgress(0);
-      setCurrentScore(null);
+      setCurrentPassed(null);
     } else {
       setCameraError('카메라에 접근할 수 없습니다. 카메라 권한을 허용해주세요.');
     }
@@ -625,9 +514,9 @@ export default function MovementTraining({
       setCurrentIndex(prev => prev + 1);
       setPhase('ready');
       setMatchProgress(0);
-      setCurrentScore(null);
+      setCurrentPassed(null);
       setCurrentFeedback(null);
-      setRealtimeScore(0);
+      setIsCurrentlyPassing(false);
       matchStartTimeRef.current = null;
       // 히스토리 초기화
       waveHistoryRef.current = [];
@@ -636,25 +525,25 @@ export default function MovementTraining({
       // 훈련 완료
       setShowFinalResult(true);
       if (onComplete) {
-        const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-        onComplete(avgScore, scores.length);
+        const passedCount = results.filter(r => r).length;
+        onComplete(passedCount, results.length);
       }
     }
-  }, [currentIndex, selectedMovements.length, scores, onComplete]);
+  }, [currentIndex, selectedMovements.length, results, onComplete]);
 
   // 다시 시도
   const handleRetry = useCallback(() => {
     setPhase('ready');
     setMatchProgress(0);
-    setCurrentScore(null);
+    setCurrentPassed(null);
     setCurrentFeedback(null);
-    setRealtimeScore(0);
+    setIsCurrentlyPassing(false);
     matchStartTimeRef.current = null;
     // 히스토리 초기화
     waveHistoryRef.current = [];
     clapHistoryRef.current = [];
-    // 마지막 점수 제거
-    setScores(prev => prev.slice(0, -1));
+    // 마지막 결과 제거
+    setResults(prev => prev.slice(0, -1));
   }, []);
 
   // 처음부터 다시
@@ -662,10 +551,10 @@ export default function MovementTraining({
     setCurrentIndex(0);
     setPhase('ready');
     setMatchProgress(0);
-    setScores([]);
-    setCurrentScore(null);
+    setResults([]);
+    setCurrentPassed(null);
     setCurrentFeedback(null);
-    setRealtimeScore(0);
+    setIsCurrentlyPassing(false);
     setShowFinalResult(false);
     matchStartTimeRef.current = null;
     // 히스토리 초기화
@@ -673,23 +562,9 @@ export default function MovementTraining({
     clapHistoryRef.current = [];
   }, []);
 
-  // 점수에 따른 색상
-  const getScoreColor = (score: number): string => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getScoreLabel = (score: number): string => {
-    if (score >= 90) return '훌륭해요!';
-    if (score >= 80) return '잘했어요!';
-    if (score >= 60) return '좋아요!';
-    return '다시 해볼까요?';
-  };
-
   // 최종 결과 화면
   if (showFinalResult) {
-    const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    const passedCount = results.filter(r => r).length;
     return (
       <div className="space-y-6">
         <div className="text-center py-8">
@@ -697,23 +572,25 @@ export default function MovementTraining({
           <h2 className="text-2xl font-bold text-[var(--neutral-800)] mb-2">
             동작 훈련 완료!
           </h2>
-          <div className={`text-5xl font-bold ${getScoreColor(avgScore)} mb-4`}>
-            {avgScore}점
+          <div className="text-5xl font-bold text-[var(--primary)] mb-4">
+            {passedCount} / {results.length}
           </div>
           <p className="text-[var(--neutral-600)]">
-            총 {scores.length}개 동작을 완료했습니다.
+            {passedCount}개 동작을 성공적으로 완료했습니다.
           </p>
         </div>
 
-        {/* 개별 점수 표시 */}
+        {/* 개별 결과 표시 */}
         <div className="grid grid-cols-5 gap-2">
-          {scores.map((score, idx) => (
+          {results.map((passed, idx) => (
             <div
               key={idx}
-              className="text-center p-3 bg-[var(--neutral-50)] rounded-lg"
+              className={`text-center p-3 rounded-lg ${passed ? 'bg-green-50' : 'bg-yellow-50'}`}
             >
               <span className="text-2xl block mb-1">{poseGuides[selectedMovements[idx]].icon}</span>
-              <span className={`text-sm font-bold ${getScoreColor(score)}`}>{score}점</span>
+              <span className={`text-2xl ${passed ? 'text-green-600' : 'text-yellow-600'}`}>
+                {passed ? '✓' : '✗'}
+              </span>
             </div>
           ))}
         </div>
@@ -761,7 +638,7 @@ export default function MovementTraining({
         <div className="flex flex-col gap-6">
           {/* 카메라 영역 - 상단 전체 너비 */}
           <div className="w-full">
-            <div className="relative w-full max-w-4xl mx-auto aspect-video bg-[var(--neutral-200)] rounded-xl overflow-hidden">
+            <div className="relative w-full max-w-4xl mx-auto aspect-[4/5] sm:aspect-[3/4] md:aspect-video bg-[var(--neutral-200)] rounded-xl overflow-hidden">
               <video
                 ref={videoRef}
                 autoPlay
@@ -781,10 +658,15 @@ export default function MovementTraining({
 
               {/* 카메라 로딩 오버레이 (ready 상태) */}
               {isLoading && phase === 'ready' && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                  <div className="text-white text-center">
-                    <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-3" />
-                    <p className="text-lg">카메라 준비 중...</p>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+                  <div className="text-white text-center max-w-xs">
+                    <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-xl font-semibold mb-2">AI 모델 로딩 중...</p>
+                    <p className="text-sm text-white/70 mb-4">자세 인식 모델을 준비하고 있습니다</p>
+                    <div className="w-full bg-white/20 rounded-full h-2">
+                      <div className="bg-white h-2 rounded-full animate-pulse" style={{ width: '60%' }} />
+                    </div>
+                    <p className="text-xs text-white/50 mt-3">처음 실행 시 약 3-5초 소요됩니다</p>
                   </div>
                 </div>
               )}
@@ -873,21 +755,23 @@ export default function MovementTraining({
                       ${isLoading ? 'opacity-50 cursor-not-allowed' : 'active:scale-95'}
                     `}
                   >
-                    {isLoading ? '카메라 준비 중...' : '시작하기'}
+                    {isLoading ? 'AI 모델 로딩 중...' : '시작하기'}
                   </button>
                 </div>
               )}
 
-              {/* active 상태 전용 - 점수/진행도 */}
+              {/* active 상태 전용 - 통과 상태/진행도 */}
               {phase === 'active' && (
                 <>
-                  {/* 실시간 점수 */}
+                  {/* 실시간 통과 상태 */}
                   <div className="p-5 bg-white rounded-xl border-2 border-[var(--neutral-200)]">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-[var(--neutral-600)]">현재 점수</span>
-                      <span className={`text-3xl font-bold ${getScoreColor(realtimeScore)}`}>
-                        {realtimeScore}점
-                      </span>
+                      <span className="text-sm font-medium text-[var(--neutral-600)]">현재 상태</span>
+                      {isCurrentlyPassing ? (
+                        <div className="text-3xl font-bold text-green-600">통과!</div>
+                      ) : (
+                        <div className="text-3xl font-bold text-yellow-600">조금 더...</div>
+                      )}
                     </div>
                     {/* 진행도 바 */}
                     <div className="mt-3">
@@ -897,7 +781,7 @@ export default function MovementTraining({
                       </div>
                       <div className="h-3 bg-[var(--neutral-200)] rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-[var(--primary)] transition-all duration-100"
+                          className={`h-full transition-all duration-100 ${isCurrentlyPassing ? 'bg-green-500' : 'bg-[var(--primary)]'}`}
                           style={{ width: `${matchProgress}%` }}
                         />
                       </div>
@@ -970,16 +854,16 @@ export default function MovementTraining({
       )}
 
       {/* Result 상태 */}
-      {phase === 'result' && currentScore !== null && (
+      {phase === 'result' && currentPassed !== null && (
         <div className="p-6 bg-[var(--neutral-50)] rounded-xl border-2 border-[var(--neutral-200)]">
           <div className="text-center py-4">
             <span className="text-5xl mb-4 block">{guide.icon}</span>
             <div className="mb-4">
-              <div className={`text-6xl font-bold ${getScoreColor(currentScore)}`}>
-                {currentScore}점
+              <div className="text-6xl">
+                {currentPassed ? '✅' : '❌'}
               </div>
-              <p className={`text-xl ${getScoreColor(currentScore)} mt-2`}>
-                {getScoreLabel(currentScore)}
+              <p className={`text-xl mt-2 ${currentPassed ? 'text-green-600' : 'text-yellow-600'}`}>
+                {currentPassed ? '동작 완료!' : '다시 해볼까요?'}
               </p>
             </div>
 

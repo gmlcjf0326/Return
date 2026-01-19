@@ -54,10 +54,18 @@ export default function AssessmentHistoryPage() {
 
   const getRiskLevelBadge = (riskLevel: string | null) => {
     switch (riskLevel) {
-      case 'normal':
-        return <StatusBadge status="normal">정상</StatusBadge>;
+      // 새 위험도 값
+      case 'excellent':
+        return <StatusBadge status="normal">우수</StatusBadge>;
       case 'mild_caution':
         return <StatusBadge status="warning">경도 주의</StatusBadge>;
+      case 'caution':
+        return <StatusBadge status="error">주의</StatusBadge>;
+      case 'severe':
+        return <StatusBadge status="error">심각</StatusBadge>;
+      // 이전 위험도 값 (하위 호환)
+      case 'normal':
+        return <StatusBadge status="normal">정상</StatusBadge>;
       case 'mci_suspected':
         return <StatusBadge status="error">MCI 의심</StatusBadge>;
       case 'consultation_recommended':

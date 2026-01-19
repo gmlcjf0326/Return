@@ -1,12 +1,10 @@
 /**
  * 사진 상태 관리 Store
- * TODO: [REAL_DATA] 실제 사진 업로드 연동 시 더미 데이터 로직 제거
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PhotoData } from '@/components/photos/PhotoCard';
-import { dummyPhotos } from '@/data/dummyPhotos';
 
 interface PhotoStore {
   photos: PhotoData[];
@@ -21,7 +19,6 @@ interface PhotoStore {
   selectPhoto: (id: string | null) => void;
   getPhotoById: (id: string) => PhotoData | undefined;
   clearPhotos: () => void;
-  initializeDummyData: () => void;
 }
 
 export const usePhotoStore = create<PhotoStore>()(
@@ -58,20 +55,7 @@ export const usePhotoStore = create<PhotoStore>()(
 
       getPhotoById: (id) => get().photos.find((p) => p.id === id),
 
-      clearPhotos: () => set({ photos: [], selectedPhotoId: null }),
-
-      // TODO: [REAL_DATA] 실제 데이터 연동 시 이 함수 호출 제거
-      initializeDummyData: () => {
-        const state = get();
-        if (!state.isInitialized) {
-          // 더미 데이터만 로드 (기존 실제 데이터가 있으면 유지)
-          const existingRealPhotos = state.photos.filter(p => !p.isDummy);
-          set({
-            photos: [...existingRealPhotos, ...dummyPhotos],
-            isInitialized: true,
-          });
-        }
-      },
+      clearPhotos: () => set({ photos: [], selectedPhotoId: null, isInitialized: false }),
     }),
     {
       name: 'return-photos',

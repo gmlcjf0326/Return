@@ -31,21 +31,58 @@ export default function PhotosPage() {
     removePhoto,
     selectPhoto,
     selectedPhotoId,
-    initializeDummyData,
   } = usePhotoStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>('album');
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState<string | null>(null);
+  const [analyzingPhotos, setAnalyzingPhotos] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
-  // 세션 확인 및 더미 데이터 초기화 - 마운트 시 1회만 실행
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // 태그 편집 상태
+  const [isEditingTags, setIsEditingTags] = useState(false);
+  const [editUserTags, setEditUserTags] = useState<string[]>([]);
+  const [newTagInput, setNewTagInput] = useState('');
+  const [isSavingTags, setIsSavingTags] = useState(false);
+
+  // 세션 확인 - 마운트 시 1회만 실행
   useEffect(() => {
     initSession();
-    // TODO: [REAL_DATA] 실제 데이터 연동 시 이 호출 제거
-    initializeDummyData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // initSession은 안정적인 참조이므로 마운트 시 1회만 실행
+
+  // 백그라운드 자동 분석 함수
+  const autoAnalyzePhoto = useCallback(async (photoId: string) => {
+    // 분석 중 상태 추가
+    setAnalyzingPhotos(prev => new Set(prev).add(photoId));
+    updatePhoto(photoId, { isAnalyzing: true });
+
+    try {
+      const response = await fetch(`/api/photos/${photoId}/auto-tag`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.autoTags) {
+          updatePhoto(photoId, {
+            autoTags: data.autoTags,
+            isAnalyzed: true,
+            isAnalyzing: false,
+          });
+        }
+      }
+    } catch {
+      // 분석 실패해도 무시 - 나중에 수동 분석 가능
+      updatePhoto(photoId, { isAnalyzing: false });
+    } finally {
+      setAnalyzingPhotos(prev => {
+        const next = new Set(prev);
+        next.delete(photoId);
+        return next;
+      });
+    }
+  }, [updatePhoto]);
 
   // 사진 업로드 처리
   const handleUpload = useCallback(async (files: File[]) => {
@@ -76,6 +113,10 @@ export default function PhotosPage() {
       const data = await response.json();
       if (data.photos) {
         addPhotos(data.photos);
+        // 업로드 후 자동 분석 시작 (백그라운드)
+        data.photos.forEach((photo: { id: string }) => {
+          autoAnalyzePhoto(photo.id);
+        });
       }
       // 업로드 후 앨범 뷰로 전환
       setViewMode('album');
@@ -84,7 +125,7 @@ export default function PhotosPage() {
     } finally {
       setIsUploading(false);
     }
-  }, [sessionId, addPhotos]);
+  }, [sessionId, addPhotos, autoAnalyzePhoto]);
 
   // AI 자동 분석
   const handleAnalyze = useCallback(async (photoId: string) => {
@@ -152,7 +193,67 @@ export default function PhotosPage() {
   // 사진 클릭
   const handlePhotoClick = useCallback((photo: PhotoData) => {
     selectPhoto(photo.id);
+    // 사진 선택 시 편집 모드 종료 및 태그 초기화
+    setIsEditingTags(false);
+    setEditUserTags(photo.userTags || []);
+    setNewTagInput('');
   }, [selectPhoto]);
+
+  // 태그 편집 시작
+  const handleStartEditTags = useCallback(() => {
+    const photo = photos.find(p => p.id === selectedPhotoId);
+    if (photo) {
+      setEditUserTags(photo.userTags || []);
+      setIsEditingTags(true);
+    }
+  }, [photos, selectedPhotoId]);
+
+  // 태그 추가
+  const handleAddTag = useCallback(() => {
+    const tag = newTagInput.trim();
+    if (tag && !editUserTags.includes(tag)) {
+      setEditUserTags(prev => [...prev, tag]);
+      setNewTagInput('');
+    }
+  }, [newTagInput, editUserTags]);
+
+  // 태그 삭제
+  const handleRemoveTag = useCallback((tagToRemove: string) => {
+    setEditUserTags(prev => prev.filter(tag => tag !== tagToRemove));
+  }, []);
+
+  // 태그 저장
+  const handleSaveTags = useCallback(async () => {
+    if (!selectedPhotoId) return;
+
+    setIsSavingTags(true);
+    try {
+      const response = await fetch(`/api/photos/${selectedPhotoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userTags: editUserTags }),
+      });
+
+      if (response.ok) {
+        updatePhoto(selectedPhotoId, { userTags: editUserTags });
+        setIsEditingTags(false);
+      } else {
+        setError('태그 저장에 실패했습니다.');
+      }
+    } catch {
+      setError('태그 저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingTags(false);
+    }
+  }, [selectedPhotoId, editUserTags, updatePhoto]);
+
+  // 태그 편집 취소
+  const handleCancelEditTags = useCallback(() => {
+    const photo = photos.find(p => p.id === selectedPhotoId);
+    setEditUserTags(photo?.userTags || []);
+    setIsEditingTags(false);
+    setNewTagInput('');
+  }, [photos, selectedPhotoId]);
 
   // 선택된 사진 정보
   const selectedPhoto = photos.find(p => p.id === selectedPhotoId);
@@ -316,22 +417,30 @@ export default function PhotosPage() {
                           <h3 className="font-medium">AI 분석 결과</h3>
 
                           <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div className="p-2 bg-muted rounded-lg">
-                              <span className="text-muted-foreground text-xs">장면</span>
-                              <p className="font-medium">{selectedPhoto.autoTags.scene}</p>
-                            </div>
-                            <div className="p-2 bg-muted rounded-lg">
-                              <span className="text-muted-foreground text-xs">인원</span>
-                              <p className="font-medium">{selectedPhoto.autoTags.peopleCount}명</p>
-                            </div>
-                            <div className="p-2 bg-muted rounded-lg">
-                              <span className="text-muted-foreground text-xs">시대</span>
-                              <p className="font-medium">{selectedPhoto.autoTags.estimatedEra}</p>
-                            </div>
-                            <div className="p-2 bg-muted rounded-lg">
-                              <span className="text-muted-foreground text-xs">분위기</span>
-                              <p className="font-medium">{selectedPhoto.autoTags.mood}</p>
-                            </div>
+                            {selectedPhoto.autoTags.scene && (
+                              <div className="p-2 bg-muted rounded-lg">
+                                <span className="text-muted-foreground text-xs">장면</span>
+                                <p className="font-medium">{selectedPhoto.autoTags.scene}</p>
+                              </div>
+                            )}
+                            {selectedPhoto.autoTags.peopleCount !== undefined && (
+                              <div className="p-2 bg-muted rounded-lg">
+                                <span className="text-muted-foreground text-xs">인원</span>
+                                <p className="font-medium">{selectedPhoto.autoTags.peopleCount}명</p>
+                              </div>
+                            )}
+                            {selectedPhoto.autoTags.estimatedEra && (
+                              <div className="p-2 bg-muted rounded-lg">
+                                <span className="text-muted-foreground text-xs">시대</span>
+                                <p className="font-medium">{selectedPhoto.autoTags.estimatedEra}</p>
+                              </div>
+                            )}
+                            {selectedPhoto.autoTags.mood && (
+                              <div className="p-2 bg-muted rounded-lg">
+                                <span className="text-muted-foreground text-xs">분위기</span>
+                                <p className="font-medium">{selectedPhoto.autoTags.mood}</p>
+                              </div>
+                            )}
                           </div>
 
                           {selectedPhoto.autoTags.description && (
@@ -363,6 +472,98 @@ export default function PhotosPage() {
                           )}
                         </div>
                       )}
+
+                      {/* 사용자 태그 편집 */}
+                      <div className="space-y-3 pt-4 border-t">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-medium">내 태그</h3>
+                          {!isEditingTags ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleStartEditTags}
+                              disabled={selectedPhoto.isDummy}
+                            >
+                              편집
+                            </Button>
+                          ) : (
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleCancelEditTags}
+                                disabled={isSavingTags}
+                              >
+                                취소
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={handleSaveTags}
+                                disabled={isSavingTags}
+                              >
+                                {isSavingTags ? '저장 중...' : '저장'}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 태그 목록 */}
+                        <div className="flex flex-wrap gap-2">
+                          {(isEditingTags ? editUserTags : (selectedPhoto.userTags || [])).map((tag, idx) => (
+                            <span
+                              key={idx}
+                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-sm ${
+                                isEditingTags
+                                  ? 'bg-primary/10 text-primary'
+                                  : 'bg-muted text-muted-foreground'
+                              }`}
+                            >
+                              {tag}
+                              {isEditingTags && (
+                                <button
+                                  onClick={() => handleRemoveTag(tag)}
+                                  className="ml-1 hover:text-destructive"
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </span>
+                          ))}
+                          {(isEditingTags ? editUserTags : (selectedPhoto.userTags || [])).length === 0 && !isEditingTags && (
+                            <p className="text-sm text-muted-foreground">
+                              아직 추가된 태그가 없습니다
+                            </p>
+                          )}
+                        </div>
+
+                        {/* 태그 입력 (편집 모드) */}
+                        {isEditingTags && (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={newTagInput}
+                              onChange={(e) => setNewTagInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddTag();
+                                }
+                              }}
+                              placeholder="태그 입력..."
+                              className="flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleAddTag}
+                              disabled={!newTagInput.trim()}
+                            >
+                              추가
+                            </Button>
+                          </div>
+                        )}
+                      </div>
 
                       {/* 액션 버튼 */}
                       <div className="pt-4 space-y-2">
@@ -401,6 +602,20 @@ export default function PhotosPage() {
           </div>
         )}
       </main>
+
+      {/* 모바일 플로팅 버튼 - 사진 선택 시 하단에 표시 */}
+      {selectedPhoto && viewMode === 'album' && (
+        <div className="fixed bottom-4 left-4 right-4 md:hidden z-50">
+          <Button
+            variant="primary"
+            className="w-full shadow-lg"
+            size="lg"
+            onClick={handleStartReminiscence}
+          >
+            이 사진으로 회상 대화 시작
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

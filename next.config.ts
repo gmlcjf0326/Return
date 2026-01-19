@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Turbopack 비활성화 (MediaPipe 호환성 문제)
-  // Webpack을 사용하여 MediaPipe 모듈 스텁 처리
+  // Turbopack 설정 (HMR 성능 최적화)
+  // MediaPipe 호환성 문제 발생 시 package.json에서 dev:webpack 스크립트 사용
 
   // 이미지 최적화 설정
   images: {
@@ -28,6 +28,16 @@ const nextConfig: NextConfig = {
     // 서버 액션 활성화
     serverActions: {
       bodySizeLimit: '2mb',
+    },
+    // Turbopack 설정 (HMR 50% 개선 기대)
+    turbo: {
+      // WASM 파일을 별도 에셋으로 처리
+      rules: {
+        '*.wasm': {
+          loaders: ['file-loader'],
+          as: '*.wasm',
+        },
+      },
     },
   },
 

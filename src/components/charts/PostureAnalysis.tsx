@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { postureLabels, postureColors, postureIcons, type PostureType } from '@/hooks/usePoseDetection';
+import { postureLabels, postureColors, postureIcons, type PostureType } from '@/lib/constants/poseConstants';
 
 interface PostureStats {
   uprightPercentage: number;

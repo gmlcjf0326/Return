@@ -8,6 +8,7 @@ export interface PhotoAnalysisResult {
   mood: string;
   objects: string[];
   description: string;
+  tags: string[]; // AI 자동 생성 태그 (5-8개)
 }
 
 /**
@@ -40,7 +41,8 @@ export async function analyzePhoto(
 - locationType: 장소 유형 (실내, 실외, 해변, 산, 도시, 시골, 학교, 직장 등)
 - mood: 사진의 전체적인 분위기 (행복한, 진지한, 평화로운, 축제분위기, 일상적인 등)
 - objects: 사진에서 식별되는 주요 물체 (배열, 최대 5개)
-- description: 사진에 대한 간단한 설명 (한국어, 2-3문장)
+- description: 이 사진 속 분위기나 느낌을 따뜻하게 표현해주세요 (한국어, 1문장). 기술적인 분석(스타일, 픽셀, 해상도, 이미지 형식 등)은 절대 하지 마세요. 예: "가족과 함께한 따뜻한 순간이 담겨 있네요"
+- tags: 사진을 대표하는 키워드 태그 (배열, 5-8개). 예: ["가족", "여행", "바다", "여름", "행복"]
 
 반드시 유효한 JSON만 출력하세요.`,
       },
@@ -74,6 +76,7 @@ export async function analyzePhoto(
       mood: result.mood || '일상적인',
       objects: result.objects || [],
       description: result.description || '분석을 완료했습니다.',
+      tags: result.tags || [result.scene, result.mood, result.locationType].filter(Boolean),
     };
   } catch (error) {
     console.error('Failed to parse GPT Vision response:', content);

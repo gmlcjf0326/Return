@@ -89,18 +89,34 @@
 
 /* Global styles - 노인 사용자를 위한 큰 폰트 */
 html {
-  font-size: 18px; /* 모바일 기본 - 노인용 확대 */
+  font-size: 16px; /* 작은 모바일 (iPhone SE 등) - 살짝 축소 */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* 일반 모바일 (376px+) */
+@media (min-width: 376px) {
+  html {
+    font-size: 17px;
+  }
+}
+
+/* 태블릿 (768px+) */
 @media (min-width: 768px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+/* 데스크톱 (1024px+) */
+@media (min-width: 1024px) {
   html {
     font-size: 19px;
   }
 }
 
-@media (min-width: 1024px) {
+/* 대형 화면 (1280px+) */
+@media (min-width: 1280px) {
   html {
     font-size: 20px;
   }
@@ -112,6 +128,28 @@ body {
   font-family: var(--font-sans);
   line-height: 1.6;
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height - iOS 대응 */
+  /* 한글 줄바꿈 최적화 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  /* iOS Safe Area 대응 */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* 긴 단어 줄바꿈 - 한글 최적화 */
+.no-break {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* Galaxy Fold 최소 너비 대응 */
+@media (max-width: 280px) {
+  html {
+    font-size: 14px;
+  }
 }
 
 /* Focus styles for accessibility */

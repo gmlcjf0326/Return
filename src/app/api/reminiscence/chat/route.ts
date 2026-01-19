@@ -78,7 +78,23 @@ export async function POST(request: NextRequest) {
     // TODO: [LLM_API] 실제 LLM으로 응답 생성
     let assistantResponse: string;
     try {
-      assistantResponse = await generateReminiscenceResponse(photo, history, message, userProfile);
+      // 이미지 URL 확인 (blob URL은 서버에서 접근 불가)
+      const imageUrl = photo.fileUrl;
+      console.log('[Chat API] 사진 URL:', imageUrl ? imageUrl.substring(0, 80) : 'none');
+
+      // blob URL인 경우 경고
+      if (imageUrl?.startsWith('blob:')) {
+        console.warn('[Chat API] blob URL은 서버에서 접근할 수 없습니다. 멀티모달 분석이 제한됩니다.');
+      }
+
+      assistantResponse = await generateReminiscenceResponse(
+        photo,
+        history,
+        message,
+        userProfile,
+        sessionId,
+        imageUrl  // 이미지 URL 전달
+      );
     } catch (error) {
       console.error('Failed to generate response:', error);
       assistantResponse = generateFallbackResponse(category, history.length);

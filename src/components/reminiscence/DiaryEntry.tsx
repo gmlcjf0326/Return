@@ -6,11 +6,9 @@
 
 'use client';
 
-import { useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui';
-import { imageStyleInfo, type DiaryImageStyle } from '@/lib/ai/imageGeneration';
+import type { DiaryImageStyle } from '@/lib/ai/imageGeneration';
 import { getCategoryLabel, getCategoryIcon } from '@/data/photoCategories';
 import type { PhotoData } from '@/components/photos/PhotoCard';
 
@@ -33,10 +31,12 @@ export default function DiaryEntry({
   isPlaceholder = true,
   className,
 }: DiaryEntryProps) {
-  const [showOriginal, setShowOriginal] = useState(false);
-
   const category = photoData.category || 'daily';
-  const displayImage = showOriginal ? photoData.fileUrl : (generatedImageUrl || photoData.fileUrl);
+  // AI 생성 이미지가 있고 플레이스홀더가 아니면 AI 이미지 사용, 아니면 원본 사진
+  const displayImage = (generatedImageUrl && !isPlaceholder)
+    ? generatedImageUrl
+    : photoData.fileUrl;
+  const isAiGenerated = generatedImageUrl && !isPlaceholder;
 
   return (
     <div className={cn('p-6 md:p-8', className)}>
@@ -54,28 +54,15 @@ export default function DiaryEntry({
             src={displayImage}
             alt="그림일기 이미지"
             fill
-            className={cn(
-              'object-cover transition-all duration-500',
-              !showOriginal && 'sepia-[0.15] saturate-[1.1]'
-            )}
+            className="object-cover transition-all duration-500 sepia-[0.15] saturate-[1.1]"
           />
 
-          {/* 플레이스홀더 표시 */}
-          {isPlaceholder && !showOriginal && (
-            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent flex items-end justify-center pb-4">
-              <span className="text-white text-xs bg-black/50 px-2 py-1 rounded">
-                🎨 {imageStyleInfo[selectedStyle].label} 스타일
-              </span>
-            </div>
-          )}
-
-          {/* 원본 보기 토글 */}
-          <button
-            onClick={() => setShowOriginal(!showOriginal)}
-            className="absolute top-2 right-2 bg-white/90 hover:bg-white text-xs px-2 py-1 rounded-full shadow transition-colors"
-          >
-            {showOriginal ? '그림 보기' : '원본 보기'}
-          </button>
+          {/* 이미지 타입 표시 */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent flex items-end justify-center pb-4">
+            <span className="text-white text-xs bg-black/50 px-2 py-1 rounded">
+              {isAiGenerated ? '🎨 AI 그림' : '📷 원본 사진'} • {getCategoryLabel(category)}
+            </span>
+          </div>
         </div>
 
         {/* 테이프 장식 */}

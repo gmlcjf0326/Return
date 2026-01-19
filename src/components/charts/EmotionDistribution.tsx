@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { emotionLabels, emotionColors, emotionIcons, type EmotionType } from '@/hooks/useFaceDetection';
+import { emotionLabels, emotionColors, emotionIcons, type EmotionType } from '@/lib/constants/emotionConstants';
 
 interface EmotionData {
   emotion: EmotionType;

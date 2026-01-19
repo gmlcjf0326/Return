@@ -8,11 +8,11 @@
 import type { PhotoData, PhotoCategory } from '@/components/photos/PhotoCard';
 import { hasGeminiApiKey, generateImage as geminiGenerateImage } from './gemini';
 
-// 이미지 스타일 - 색연필 스케치로 고정
-export type DiaryImageStyle = 'pencil';
+// 이미지 스타일 - 수채화 또는 색연필 스케치
+export type DiaryImageStyle = 'pencil' | 'watercolor';
 
-// 기본 스타일 (색연필 스케치)
-export const DEFAULT_DIARY_STYLE: DiaryImageStyle = 'pencil';
+// 기본 스타일 (수채화)
+export const DEFAULT_DIARY_STYLE: DiaryImageStyle = 'watercolor';
 
 // 이미지 생성 설정
 export interface DiaryImageConfig {
@@ -34,17 +34,26 @@ export interface GeneratedImage {
 // 색연필 스케치 스타일 프롬프트
 const COLORED_PENCIL_STYLE = 'colored pencil sketch style, soft hand-drawn lines, gentle shading, warm nostalgic feeling, artistic illustration, like a diary illustration';
 
-// 스타일별 프롬프트 수정자 (색연필 스케치만 유지)
+// 수채화 스타일 프롬프트
+const WATERCOLOR_STYLE = 'soft watercolor painting style, gentle brush strokes, warm pastel colors, dreamy nostalgic atmosphere, artistic diary illustration, hand-painted feel';
+
+// 스타일별 프롬프트 수정자
 const styleModifiers: Record<DiaryImageStyle, string> = {
   pencil: COLORED_PENCIL_STYLE,
+  watercolor: WATERCOLOR_STYLE,
 };
 
-// 스타일별 UI 표시 정보 (색연필 스케치만 유지)
+// 스타일별 UI 표시 정보
 export const imageStyleInfo: Record<DiaryImageStyle, { label: string; icon: string; description: string }> = {
   pencil: {
     label: '색연필 스케치',
     icon: '✏️',
     description: '따뜻한 색연필 스케치 스타일',
+  },
+  watercolor: {
+    label: '수채화',
+    icon: '🎨',
+    description: '부드러운 수채화 스타일',
   },
 };
 
@@ -100,7 +109,7 @@ export function buildDiaryPrompt(
 }
 
 /**
- * 그림일기 이미지 생성 (Imagen 3)
+ * 그림일기 이미지 생성 (Gemini 2.0 Flash)
  */
 export async function generateDiaryImage(
   config: DiaryImageConfig,
@@ -108,14 +117,15 @@ export async function generateDiaryImage(
 ): Promise<GeneratedImage> {
   const category = photoContext.category || 'daily';
 
-  // Imagen 3 이미지 생성 시도
+  // Gemini 2.0 Flash 이미지 생성 시도
   if (hasGeminiApiKey()) {
     try {
-      console.log('Attempting Imagen 3 image generation...');
+      console.log('Attempting Gemini 2.0 Flash image generation...');
       const result = await geminiGenerateImage(config.prompt);
       if (result) {
         // Base64 이미지를 data URL로 변환
         const dataUrl = `data:${result.mimeType};base64,${result.imageData}`;
+        console.log('Image generated successfully!');
         return {
           url: dataUrl,
           prompt: config.prompt,
@@ -124,15 +134,15 @@ export async function generateDiaryImage(
         };
       }
     } catch (error) {
-      console.error('Imagen 3 image generation failed:', error);
+      console.error('Gemini 2.0 Flash image generation failed:', error);
     }
   }
 
-  // 플레이스홀더 반환
-  console.log('Using placeholder image - Imagen 3 not available');
+  // 플레이스홀더 대신 원본 사진 URL 반환 (photoContext.fileUrl 사용)
+  console.log('Using original photo - image generation not available');
 
   return {
-    url: getPlaceholderImage(category, config.style),
+    url: photoContext.fileUrl || getPlaceholderImage(category, config.style),
     prompt: config.prompt,
     style: config.style,
     isPlaceholder: true,
@@ -176,12 +186,12 @@ export function isImageGenerationAvailable(): boolean {
 export function getAvailableImageServices(): Array<{ name: string; available: boolean; priority: number }> {
   return [
     {
-      name: 'Imagen 3',
+      name: 'Gemini 2.0 Flash',
       available: hasGeminiApiKey(),
       priority: 1,
     },
     {
-      name: 'Placeholder',
+      name: 'Original Photo',
       available: true, // 항상 사용 가능
       priority: 99,
     },
@@ -192,8 +202,8 @@ export function getAvailableImageServices(): Array<{ name: string; available: bo
  * 현재 활성화된 이미지 생성 서비스 가져오기
  */
 export function getActiveImageService(): string {
-  if (hasGeminiApiKey()) return 'Imagen 3';
-  return 'Placeholder';
+  if (hasGeminiApiKey()) return 'Gemini 2.0 Flash';
+  return 'Original Photo';
 }
 
 export default {

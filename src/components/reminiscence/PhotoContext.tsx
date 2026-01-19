@@ -105,73 +105,81 @@ export function PhotoContext({ photo, onPhotoChange, className = '' }: PhotoCont
 
               {/* 태그 정보 */}
               <div className="grid grid-cols-2 gap-2">
-                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                  <svg
-                    className="w-4 h-4 text-slate-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
-                    />
-                  </svg>
-                  <span className="text-xs text-slate-600">{photo.autoTags.scene}</span>
-                </div>
+                {photo.autoTags.scene && (
+                  <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                    <svg
+                      className="w-4 h-4 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
+                      />
+                    </svg>
+                    <span className="text-xs text-slate-600">{photo.autoTags.scene}</span>
+                  </div>
+                )}
 
-                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                  <svg
-                    className="w-4 h-4 text-slate-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-                    />
-                  </svg>
-                  <span className="text-xs text-slate-600">{photo.autoTags.peopleCount}명</span>
-                </div>
+                {photo.autoTags.peopleCount !== undefined && (
+                  <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                    <svg
+                      className="w-4 h-4 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                      />
+                    </svg>
+                    <span className="text-xs text-slate-600">{photo.autoTags.peopleCount}명</span>
+                  </div>
+                )}
 
-                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                  <svg
-                    className="w-4 h-4 text-slate-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <span className="text-xs text-slate-600">{photo.autoTags.estimatedEra}</span>
-                </div>
+                {photo.autoTags.estimatedEra && (
+                  <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                    <svg
+                      className="w-4 h-4 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <span className="text-xs text-slate-600">{photo.autoTags.estimatedEra}</span>
+                  </div>
+                )}
 
-                <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                  <svg
-                    className="w-4 h-4 text-slate-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <span className="text-xs text-slate-600">{photo.autoTags.mood}</span>
-                </div>
+                {photo.autoTags.mood && (
+                  <div className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                    <svg
+                      className="w-4 h-4 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <span className="text-xs text-slate-600">{photo.autoTags.mood}</span>
+                  </div>
+                )}
               </div>
 
               {/* 장소 */}

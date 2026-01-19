@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSessionStore } from '@/store/sessionStore';
@@ -13,10 +13,26 @@ export default function TrainingPage() {
   const { session, initSession } = useSessionStore();
   const { recentSessions } = useTrainingStore();
   const [activeDemo, setActiveDemo] = useState<DemoType | null>(null);
+  const preloadStartedRef = useRef(false);
 
   useEffect(() => {
     initSession();
   }, [initSession]);
+
+  // 동작 훈련 프리로드 (hover 시 TensorFlow 미리 로드)
+  const preloadMovementTraining = useCallback(async () => {
+    if (preloadStartedRef.current) return;
+    preloadStartedRef.current = true;
+
+    try {
+      // TensorFlow 백그라운드 로드
+      const { initTensorFlow } = await import('@/lib/ai/tensorflow');
+      await initTensorFlow();
+      console.log('[Preload] TensorFlow loaded in background');
+    } catch (error) {
+      console.warn('[Preload] Failed to preload TensorFlow:', error);
+    }
+  }, []);
 
   // 순서: 음성 훈련, 동작 훈련, 회상 대화, 언어력 게임, 기억력 게임, 계산력 게임
   const trainingModules = [
@@ -51,6 +67,7 @@ export default function TrainingPage() {
       status: 'available',
       tags: ['동작', '신체'],
       demoType: 'movement' as DemoType,
+      onHover: preloadMovementTraining, // AI 모델 미리 로드
     },
     {
       id: 'reminiscence',
@@ -149,8 +166,11 @@ export default function TrainingPage() {
         {/* 훈련 모듈 그리드 */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
           {trainingModules.map((module) => (
-            <Card
+            <div
               key={module.id}
+              onMouseEnter={module.onHover}
+            >
+            <Card
               className="hover:shadow-lg transition-all group"
             >
               <CardContent className="p-6">
@@ -197,6 +217,7 @@ export default function TrainingPage() {
                 </div>
               </CardContent>
             </Card>
+            </div>
           ))}
         </div>
 

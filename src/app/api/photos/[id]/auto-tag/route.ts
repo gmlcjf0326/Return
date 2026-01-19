@@ -76,6 +76,7 @@ export async function POST(
         mood: '평화로운',
         objects: [],
         description: '사진 분석을 완료했습니다. (기본값)',
+        tags: ['일상', '평화로운'],
       };
     }
 

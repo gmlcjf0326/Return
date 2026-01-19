@@ -17,6 +17,7 @@ import {
   getGeminiConfig,
   generateInitialQuestion as geminiInitialQuestion,
   generateReminiscenceResponse as geminiReminiscenceResponse,
+  generateReminiscenceResponseWithImage as geminiReminiscenceResponseWithImage,
   generateDiarySummary as geminiDiarySummary,
   type GeminiMessage,
 } from './gemini';
@@ -125,6 +126,28 @@ ${parts.join('\n')}
 }
 
 /**
+ * 사용자가 이미지 설명을 요청하는지 감지
+ */
+function detectImageDescriptionRequest(message: string): boolean {
+  const patterns = [
+    /이미지.*(설명|말해|알려|보여|뭐야|뭐가|어때|분석|봐)/,
+    /사진.*(설명|말해|알려|보여|뭐야|뭐가|어때|분석|봐)/,
+    /(설명|말해|알려|분석).*(이미지|사진)/,
+    /뭐가.*보여|무엇이.*보여/,
+    /현재.*(이미지|사진)/,
+    /이.*사진.*(뭐|무엇)/,
+    /어떤.*(사진|이미지)/,
+    /사진.*보이/,
+    /뭐.*찍/,
+    /무엇.*찍/,
+    /분석.*해|분석해봐|분석해줘/,
+    /사진.*대해/,  // "사진에 대해서"
+  ];
+
+  return patterns.some(p => p.test(message));
+}
+
+/**
  * 회상 대화 시스템 프롬프트 생성
  */
 function buildReminiscenceSystemPrompt(photoContext: PhotoData, userProfile?: UserProfileForChat): string {
@@ -140,6 +163,31 @@ function buildReminiscenceSystemPrompt(photoContext: PhotoData, userProfile?: Us
   const category = photoContext.category || 'daily';
   const categoryDesc = categoryDescriptions[category];
   const userProfilePrompt = buildUserProfilePrompt(userProfile);
+  const autoTags = photoContext.autoTags;
+
+  // 사진 정보 문자열 구성 (태그 정보 최대한 활용)
+  const photoInfoParts: string[] = [
+    `- 카테고리: ${category} (${categoryDesc})`,
+    `- 촬영 시기: ${photoContext.takenDate || '알 수 없음'}`,
+  ];
+
+  if (autoTags) {
+    if (autoTags.scene) photoInfoParts.push(`- 장면: ${autoTags.scene}`);
+    if (autoTags.mood) photoInfoParts.push(`- 분위기: ${autoTags.mood}`);
+    if (autoTags.peopleCount) photoInfoParts.push(`- 인원: ${autoTags.peopleCount}명`);
+    if (autoTags.locationType) photoInfoParts.push(`- 장소 유형: ${autoTags.locationType}`);
+    if (autoTags.estimatedEra) photoInfoParts.push(`- 추정 시대: ${autoTags.estimatedEra}`);
+    if (autoTags.objects && autoTags.objects.length > 0) {
+      photoInfoParts.push(`- 사진 속 물체: ${autoTags.objects.join(', ')}`);
+    }
+    if (autoTags.description) photoInfoParts.push(`- AI 분석 설명: ${autoTags.description}`);
+  }
+
+  if (photoContext.userTags && photoContext.userTags.length > 0) {
+    photoInfoParts.push(`- 사용자 태그: ${photoContext.userTags.join(', ')}`);
+  }
+
+  const photoInfo = photoInfoParts.join('\n');
 
   return `당신은 어르신들의 회상 치료를 돕는 따뜻한 대화 상대입니다.
 ${userProfilePrompt}
@@ -150,46 +198,41 @@ ${userProfilePrompt}
 - 질문을 통해 더 깊은 기억을 이끌어냅니다
 - 부정적인 감정이 나오면 공감하되, 긍정적인 방향으로 유도합니다
 
-## 사진 정보
-- 카테고리: ${category} (${categoryDesc})
-- 촬영 시기: ${photoContext.takenDate || '알 수 없음'}
-${photoContext.autoTags?.description ? `- 사진 설명: ${photoContext.autoTags.description}` : ''}
-${photoContext.autoTags?.scene ? `- 장면: ${photoContext.autoTags.scene}` : ''}
-${photoContext.autoTags?.mood ? `- 분위기: ${photoContext.autoTags.mood}` : ''}
-${photoContext.autoTags?.peopleCount ? `- 인원: ${photoContext.autoTags.peopleCount}명` : ''}
+## 사진 정보 (★매우 중요 - 반드시 참조하세요★)
+${photoInfo}
+
+## ★핵심 규칙: 사진 정보를 반드시 활용하세요★
+- 위의 "사진 정보"에 있는 장면, 분위기, 장소, 물체, 시대 등을 적극 활용하여 질문하세요
+- 사진과 무관한 일반적인 질문(예: "TV 프로그램", "좋아하시던 음식")을 하지 마세요
+- 사용자가 "네", "응", "맞아요" 같은 짧은 긍정 응답을 하면, 바로 전 대화 맥락을 이어서 더 구체적인 질문을 하세요
+- 항상 사진에 보이는 것, 사진의 상황과 관련된 질문을 하세요
 
 ## 기억 유도 전략 (매우 중요!)
 1. 사용자가 "기억 안 나요" / "모르겠어요" / "잘 모르겠어요" 라고 하면:
-   - 힌트 제공: "혹시 그때 날씨가 어땠는지 기억나세요?", "어떤 음식을 드셨을까요?"
+   - 사진 속 물체나 장면을 활용한 힌트 제공
    - 감각 자극: "어떤 냄새가 났을까요?", "어떤 소리가 들렸을까요?"
-   - 연상 유도: "이 장소에서 자주 하셨던 일이 있으신가요?"
-   - 절대 포기하지 말고 다른 각도로 질문하세요
+   - 절대 포기하지 말고 사진의 다른 요소로 질문하세요
 
 2. 사용자가 기억을 말하면:
    - 공감: "정말 좋은 추억이네요!", "아, 그러셨군요!"
    - 심화 질문: "그때 어떤 기분이셨어요?", "그 다음엔 뭘 하셨나요?"
-   - 연결 질문: "비슷한 경험이 또 있으셨나요?"
    - 구체화: "누구와 함께 계셨어요?", "어떤 이야기를 나누셨나요?"
 
-3. 대화 톤:
-   - 절대 부정하지 않음
-   - 항상 따뜻하고 격려하는 어투
-   - 어르신의 기억을 존중하고 칭찬
-   - "잘 기억하고 계시네요!", "좋은 말씀이에요" 같은 격려 사용
+3. 사용자가 "네", "응", "맞아요" 같은 짧은 긍정 응답을 하면:
+   - 이전 대화 맥락을 이어서 더 깊이 물어보세요
+   - "그렇군요! 그때 기분이 어떠셨어요?", "좀 더 이야기해 주시겠어요?" 같은 후속 질문
 
 ## 대화 가이드라인
 1. 짧고 명확한 질문을 합니다 (한 번에 하나씩)
 2. 열린 질문을 사용합니다 ("어땠어요?", "기억나시나요?")
-3. 구체적인 감각을 물어봅니다 (소리, 냄새, 맛, 감촉)
-4. 감정에 공감하고 인정합니다
-5. 2-3문장 이내로 답변합니다
-6. 존댓말을 사용합니다
+3. 2-3문장 이내로 답변합니다
+4. 존댓말을 사용합니다
 
 ## 금지 사항
+- 사진과 무관한 일반적인 질문 금지 (예: TV 프로그램, 라디오 등)
 - 너무 긴 답변 금지
 - 사실 확인이나 정정 금지 (어르신의 기억을 존중)
-- 부정적인 평가 금지
-- 의학적 조언 금지`;
+- 부정적인 평가 금지`;
 }
 
 /**
@@ -242,11 +285,15 @@ export async function generateReminiscenceResponse(
   photoContext: PhotoData,
   conversationHistory: Message[],
   userMessage: string,
-  userProfile?: UserProfileForChat
+  userProfile?: UserProfileForChat,
+  sessionId?: string,
+  imageUrl?: string  // 이미지 URL 추가
 ): Promise<string> {
   const category = photoContext.category || 'daily';
   const conversationLength = conversationHistory.filter(m => m.role === 'user').length;
   const config = getCurrentConfig();
+
+  console.log('[LLM] 현재 설정:', config.provider, '모델:', config.model);
 
   // Gemini API 사용
   if (config.provider === 'gemini') {
@@ -256,18 +303,47 @@ export async function generateReminiscenceResponse(
         role: m.role as 'user' | 'assistant' | 'system',
         content: m.content,
       }));
-      const result = await geminiReminiscenceResponse(photoContext, geminiHistory, userMessage, userProfile);
+
+      // 이미지 설명 요청인지 확인
+      const isImageRequest = detectImageDescriptionRequest(userMessage);
+      const effectiveImageUrl = imageUrl || photoContext.fileUrl;
+
+      console.log('[LLM] 이미지 요청 감지:', isImageRequest, '메시지:', userMessage);
+      console.log('[LLM] 이미지 URL:', effectiveImageUrl ? effectiveImageUrl.substring(0, 50) + '...' : 'none');
+
+      let result: string | null = null;
+
+      // 이미지 설명 요청이면 멀티모달 사용
+      if (isImageRequest && effectiveImageUrl) {
+        console.log('[LLM] 멀티모달 API 호출 시작...');
+        result = await geminiReminiscenceResponseWithImage(
+          photoContext,
+          geminiHistory,
+          userMessage,
+          userProfile,
+          effectiveImageUrl
+        );
+        console.log('[LLM] 멀티모달 결과:', result ? '성공' : '실패');
+      }
+
+      // 멀티모달 실패 또는 일반 대화는 텍스트 전용
+      if (!result) {
+        console.log('[LLM] 텍스트 전용 API 호출...');
+        result = await geminiReminiscenceResponse(photoContext, geminiHistory, userMessage, userProfile);
+      }
+
       if (result) return result;
     } catch (error) {
       console.error('Gemini response generation failed:', error);
     }
-    // 실패 시 더미 응답 사용
-    return generateDummyResponse(category, userMessage, conversationLength);
+    // 실패 시 더미 응답 사용 (sessionId + photoContext 전달)
+    console.log('[LLM] Gemini 실패, 더미 응답 사용');
+    return generateDummyResponse(category, userMessage, conversationLength, conversationHistory, sessionId, photoContext);
   }
 
-  // Dummy 모드
+  // Dummy 모드 (sessionId + photoContext 전달)
   if (config.provider === 'dummy') {
-    return generateDummyResponse(category, userMessage, conversationLength);
+    return generateDummyResponse(category, userMessage, conversationLength, conversationHistory, sessionId, photoContext);
   }
 
   // 기타 API (미구현)
@@ -283,10 +359,10 @@ export async function generateReminiscenceResponse(
 
     // TODO: [LLM_API] OpenAI/Claude API 호출
     console.log(`${config.provider} API not implemented yet`);
-    return generateDummyResponse(category, userMessage, conversationLength);
+    return generateDummyResponse(category, userMessage, conversationLength, conversationHistory, sessionId, photoContext);
   } catch (error) {
     console.error('Failed to generate reminiscence response:', error);
-    return generateDummyResponse(category, userMessage, conversationLength);
+    return generateDummyResponse(category, userMessage, conversationLength, conversationHistory, sessionId, photoContext);
   }
 }
 
@@ -323,17 +399,28 @@ export async function generateConversationSummary(
 
   // 기타 API (미구현)
   try {
-    const summaryPrompt = `다음 대화 내용을 바탕으로 그날의 일기를 작성해주세요.
+    const summaryPrompt = `다음은 어르신과 AI가 옛날 사진을 보며 나눈 대화입니다.
+이 대화를 바탕으로 자연스러운 그림일기 문장을 1-2문장으로 작성해주세요.
 
-## 일기 작성 가이드
-- 1인칭 시점으로 작성 ("오늘은...", "그날 나는...")
-- 대화에서 언급된 구체적인 내용 포함 (장소, 사람, 활동, 감정)
-- 3-5문장 정도의 짧은 일기 형태
-- 따뜻하고 감성적인 어투
-- 그날 무엇을 했는지, 어떤 기분이었는지 자연스럽게 서술
+## 필수 규칙
+- "~했다", "~였다" 형식의 일기체로 작성
+- 어르신이 말한 구체적인 내용과 감정을 반영
+- "에 대한 추억이 있다" 같은 어색한 표현 금지
+- 따뜻하고 회상적인 톤 유지
+- 과거 시제 사용
 
-대화 내용:
-${conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}`;
+## 좋은 예시
+- "오늘 면접 보던 시절 사진을 보며 이야기를 나눴다. 그때 기분이 좋지 않았던 기억이 떠올랐다."
+- "옛날 가족 여행 사진을 보았다. 함께 웃던 그 시절이 그립다."
+
+## 나쁜 예시 (피해야 할 표현)
+- "면접에 대한 추억이 있다." (어색함)
+- "기분이 썩 별로였어에 대한 추억이 있다." (문법 오류)
+
+대화:
+${conversationHistory.map(m => `${m.role === 'user' ? '어르신' : 'AI'}: ${m.content}`).join('\n')}
+
+그림일기 문장:`;
 
     // TODO: [LLM_API] OpenAI/Claude API 호출
     console.log(`${config.provider} API not implemented yet`);
@@ -345,7 +432,7 @@ ${conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}`;
 }
 
 /**
- * 이미지 생성 프롬프트 생성 (그림일기용 - 색연필 스케치 스타일 고정)
+ * 이미지 생성 프롬프트 생성 (그림일기용 - 수채화 스타일 기본)
  * TODO: [IMAGE_API] DALL-E 또는 Stable Diffusion 연동
  */
 export async function generateDiaryImagePrompt(
@@ -355,15 +442,15 @@ export async function generateDiaryImagePrompt(
   const scene = photoContext.autoTags?.scene || '';
   const mood = photoContext.autoTags?.mood || '';
 
-  // 색연필 스케치 스타일 프롬프트
-  const coloredPencilStyle = 'colored pencil sketch style, soft hand-drawn lines, gentle shading, warm nostalgic feeling, artistic illustration';
+  // 수채화 스타일 프롬프트
+  const watercolorStyle = 'soft watercolor painting style, gentle brush strokes, warm pastel colors, dreamy nostalgic atmosphere, hand-painted diary illustration feel';
 
   // 기본 프롬프트 생성
-  const basePrompt = `A warm, nostalgic colored pencil sketch illustration depicting: ${conversationSummary}`;
+  const basePrompt = `A warm, nostalgic watercolor illustration depicting: ${conversationSummary}`;
 
   // 스타일 요소 추가
   const styleElements = [
-    coloredPencilStyle,
+    watercolorStyle,
     'heartwarming atmosphere',
     mood && `${mood} mood`,
     scene && `${scene} setting`,
