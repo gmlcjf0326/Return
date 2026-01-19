@@ -109,7 +109,7 @@ export function buildDiaryPrompt(
 }
 
 /**
- * 그림일기 이미지 생성 (Gemini 2.0 Flash)
+ * 그림일기 이미지 생성 (Gemini 2.5 Flash Image)
  */
 export async function generateDiaryImage(
   config: DiaryImageConfig,
@@ -117,10 +117,10 @@ export async function generateDiaryImage(
 ): Promise<GeneratedImage> {
   const category = photoContext.category || 'daily';
 
-  // Gemini 2.0 Flash 이미지 생성 시도
+  // Gemini 2.5 Flash Image 이미지 생성 시도
   if (hasGeminiApiKey()) {
     try {
-      console.log('Attempting Gemini 2.0 Flash image generation...');
+      console.log('Attempting Gemini 2.5 Flash Image generation...');
       const result = await geminiGenerateImage(config.prompt);
       if (result) {
         // Base64 이미지를 data URL로 변환
@@ -134,7 +134,7 @@ export async function generateDiaryImage(
         };
       }
     } catch (error) {
-      console.error('Gemini 2.0 Flash image generation failed:', error);
+      console.error('Gemini 2.5 Flash Image generation failed:', error);
     }
   }
 
@@ -186,7 +186,7 @@ export function isImageGenerationAvailable(): boolean {
 export function getAvailableImageServices(): Array<{ name: string; available: boolean; priority: number }> {
   return [
     {
-      name: 'Gemini 2.0 Flash',
+      name: 'Gemini 2.5 Flash Image',
       available: hasGeminiApiKey(),
       priority: 1,
     },
@@ -202,7 +202,7 @@ export function getAvailableImageServices(): Array<{ name: string; available: bo
  * 현재 활성화된 이미지 생성 서비스 가져오기
  */
 export function getActiveImageService(): string {
-  if (hasGeminiApiKey()) return 'Gemini 2.0 Flash';
+  if (hasGeminiApiKey()) return 'Gemini 2.5 Flash Image';
   return 'Original Photo';
 }
 

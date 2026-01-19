@@ -47,10 +47,10 @@ export function getTextModel(): string {
 }
 
 /**
- * 이미지 모델 이름 가져오기 (Gemini 2.0 Flash - 이미지 생성 지원)
+ * 이미지 모델 이름 가져오기 (Gemini 2.5 Flash Image - 이미지 생성 전용)
  */
 export function getImageModel(): string {
-  return 'gemini-2.0-flash-exp';
+  return 'gemini-2.5-flash-image';
 }
 
 /**
@@ -149,7 +149,7 @@ Generate a single beautiful watercolor-style illustration.`;
     console.warn('No image found in response');
     return null;
   } catch (error) {
-    console.error('Gemini 2.0 Flash image generation failed:', error);
+    console.error('Gemini 2.5 Flash Image generation failed:', error);
     return null;
   }
 }
