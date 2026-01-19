@@ -29,16 +29,6 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '2mb',
     },
-    // Turbopack 설정 (HMR 50% 개선 기대)
-    turbo: {
-      // WASM 파일을 별도 에셋으로 처리
-      rules: {
-        '*.wasm': {
-          loaders: ['file-loader'],
-          as: '*.wasm',
-        },
-      },
-    },
   },
 
 
